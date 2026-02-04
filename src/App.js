@@ -134,13 +134,13 @@ const App = () => {
     setIsProcessing(true);
     setErrorMsg(null);
     
-    // API 金鑰在 Canvas 環境中由系統自動處理，此處留空
-    const apiKey = process.env.REACT_APP_GEMINI_KEY;
+    // 優先序：1. 系統自動注入的空字串 (Runtime) 2. Netlify 環境變數
+    const apiKey = (typeof __initial_auth_token !== 'undefined') ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
     const model = "gemini-2.5-flash-preview-09-2025";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     try {
-      const translatePrompt = `將${langMode === 'EN' ? '英文' : '日文'}單字 "${newWord.term}" 翻譯成繁體中文，僅提供最簡短的一個意思。`;
+      const translatePrompt = `你是一個專業的翻譯助手。請將${langMode === 'EN' ? '英文' : '日文'}單字 "${newWord.term}" 翻譯成繁體中文，只需提供最簡短精確的一個意思，不要回答其他多餘的字。`;
       
       let retryCount = 0;
       const maxRetries = 5;
@@ -150,20 +150,32 @@ const App = () => {
         response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: translatePrompt }] }] })
+          body: JSON.stringify({ 
+            contents: [{ parts: [{ text: translatePrompt }] }] 
+          })
         });
+        
         if (response.ok) break;
+        
+        const errData = await response.json();
+        console.error("API Attempt failed:", errData);
+        
         retryCount++;
-        await new Promise(res => setTimeout(res, Math.pow(2, retryCount) * 1000));
+        const delay = Math.pow(2, retryCount) * 1000;
+        await new Promise(res => setTimeout(res, delay));
       }
 
-      if (!response.ok) throw new Error("API failed after retries");
+      if (!response || !response.ok) throw new Error(`API 連線失敗 (狀態碼: ${response?.status})`);
 
       const result = await response.json();
       const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      
+      if (!text) throw new Error("翻譯結果為空");
+      
       setNewWord(prev => ({ ...prev, definition: text }));
     } catch (err) {
-      setErrorMsg("翻譯功能暫時無法使用。");
+      console.error("Translation error:", err);
+      setErrorMsg(`翻譯失敗：${err.message || "請確認 API Key 是否設定正確"}`);
     } finally {
       setIsProcessing(false);
     }
