@@ -144,7 +144,7 @@ const App = () => {
   const fetchTranslation = async () => {
     if (!newWord.term) return;
     setIsProcessing(true);
-    const apiKey = ""; // 建議從環境變數讀取
+    const apiKey = "AIzaSyDtmIbHC7G2UuLfF8Xnk-xHgV7rO3ZmPRk"; // 建議從環境變數讀取
     try {
       const translatePrompt = `將${langMode === 'EN' ? '英文' : '日文'}單字 "${newWord.term}" 翻譯成繁體中文，給出最簡短的一個意思。`;
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
