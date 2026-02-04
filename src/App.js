@@ -36,11 +36,39 @@ import {
   PlusCircle
 } from 'lucide-react';
 
-const firebaseConfig = JSON.parse(__firebase_config);
+// ========================================================
+// 🛠️ Firebase 配置區塊
+// ========================================================
+// 在本地開發時，請將 Firebase Console 的 SDK 內容填入下方：
+const localFirebaseConfig = {
+  apiKey: "AIzaSyANSFDqUe38bdTqE5OrRuQi5QCA8BLAqvw",
+  authDomain: "vocabularyh-4c909.firebaseapp.com",
+  projectId: "vocabularyh-4c909",
+  storageBucket: "vocabularyh-4c909.firebasestorage.app",
+  messagingSenderId: "924954723346",
+  appId: "1:924954723346:web:cc792c2fdd317fb96684cb",
+  measurementId: "G-C7KZ6SPTVC"
+};
+
+// 優先使用 Canvas 環境變數，若不存在則使用 local 配置
+const getFirebaseConfig = () => {
+  try {
+    if (typeof __firebase_config !== 'undefined') {
+      return JSON.parse(__firebase_config);
+    }
+  } catch (e) {
+    console.warn("環境變數解析失敗，切換至本地配置");
+  }
+  return localFirebaseConfig;
+};
+
+const firebaseConfig = getFirebaseConfig();
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
+
+// 安全讀取 appId
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
 
 const App = () => {
@@ -66,6 +94,7 @@ const App = () => {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // 檢查是否在 Canvas 環境有傳入 token
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         }
@@ -87,12 +116,14 @@ const App = () => {
       setWords([]);
       return;
     }
+    // 確保路徑結構正確
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
     const unsubscribe = onSnapshot(wordsRef, (snapshot) => {
       const wordList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setWords(wordList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
-    }, () => {
-      setErrorMsg("同步失敗：權限不足。");
+    }, (err) => {
+      console.error("Firestore Error:", err);
+      setErrorMsg("同步失敗：權限不足或路徑錯誤。");
     });
     return () => unsubscribe();
   }, [user]);
@@ -113,7 +144,7 @@ const App = () => {
   const fetchTranslation = async () => {
     if (!newWord.term) return;
     setIsProcessing(true);
-    const apiKey = ""; 
+    const apiKey = ""; // 建議從環境變數讀取
     try {
       const translatePrompt = `將${langMode === 'EN' ? '英文' : '日文'}單字 "${newWord.term}" 翻譯成繁體中文，給出最簡短的一個意思。`;
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -161,7 +192,6 @@ const App = () => {
     const quizType = type.split('-')[1];
     const eligibleForCurrentMode = currentWords.filter(w => !w.stats?.[quizType]?.archived && w.lang === langMode);
 
-    // 【修改點】將門檻從 4 改為 3。至少需要 3 個單字來生成選項 (1 正確, 2 錯誤)
     if (quizType === 'mc' && currentWords.filter(w => w.lang === langMode).length < 3) {
       setQuizWord(null);
       setQuizFeedback(null);
@@ -181,7 +211,6 @@ const App = () => {
 
     if (quizType === 'mc') {
       const otherWords = currentWords.filter(w => w.id !== randomWord.id && w.lang === langMode);
-      // 隨機取最多 3 個當作錯誤選項
       const shuffledOthers = otherWords.sort(() => 0.5 - Math.random()).slice(0, 3);
       const optionsSet = [...shuffledOthers.map(w => w.definition), randomWord.definition];
       setOptions(optionsSet.sort(() => 0.5 - Math.random()));
@@ -293,7 +322,7 @@ const App = () => {
       <header className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-30 px-6 h-16 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2 font-bold text-blue-600">
           <Brain size={24} />
-          <span className="text-xl tracking-tight font-black">智學單字 4.2</span>
+          <span className="text-xl tracking-tight font-black">智學單字 4.5</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="bg-slate-100 p-1 rounded-xl flex border">
@@ -390,7 +419,6 @@ const App = () => {
               </div>
             )}
 
-            {/* 【防呆機制】修改門檻為 3 */}
             {activeTab === 'quiz-mc' && currentLangWordsCount < 3 ? (
                <div className="py-8 flex flex-col items-center animate-in zoom-in duration-300">
                  <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6">
