@@ -41,7 +41,7 @@ import {
 // ========================================================
 // 在本地開發時，請將 Firebase Console 的 SDK 內容填入下方：
 const localFirebaseConfig = {
-  apiKey: "AIzaSyANSFDqUe38bdTqE5OrRuQi5QCA8BLAqvw",
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: "vocabularyh-4c909.firebaseapp.com",
   projectId: "vocabularyh-4c909",
   storageBucket: "vocabularyh-4c909.firebasestorage.app",
@@ -144,7 +144,7 @@ const App = () => {
   const fetchTranslation = async () => {
     if (!newWord.term) return;
     setIsProcessing(true);
-    const apiKey = "AIzaSyDtmIbHC7G2UuLfF8Xnk-xHgV7rO3ZmPRk"; // 建議從環境變數讀取
+    const apiKey = process.env.REACT_APP_GEMINI_KEY;
     try {
       const translatePrompt = `將${langMode === 'EN' ? '英文' : '日文'}單字 "${newWord.term}" 翻譯成繁體中文，給出最簡短的一個意思。`;
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
