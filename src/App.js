@@ -26,21 +26,25 @@ import {
   Trophy, 
   Search, 
   LogOut, 
-  ShieldCheck, 
-  BarChart3, 
   Loader2, 
   Medal,
-  ThumbsUp,
   AlertCircle,
-  PlusCircle,
   Leaf
 } from 'lucide-react';
 
 // ========================================================
 // 🛠️ Firebase 配置區塊
 // ========================================================
+const getEnv = (key) => {
+  try {
+    if (typeof window !== 'undefined' && window[key]) return window[key];
+    if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key];
+  } catch (e) {}
+  return "";
+};
+
 const localFirebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  apiKey: getEnv('REACT_APP_FIREBASE_API_KEY'),
   authDomain: "vocabularyh-4c909.firebaseapp.com",
   projectId: "vocabularyh-4c909",
   storageBucket: "vocabularyh-4c909.firebasestorage.app",
@@ -51,12 +55,10 @@ const localFirebaseConfig = {
 
 const getFirebaseConfig = () => {
   try {
-    if (typeof __firebase_config !== 'undefined') {
+    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
       return JSON.parse(__firebase_config);
     }
-  } catch (e) {
-    console.warn("環境變數解析失敗，切換至本地配置");
-  }
+  } catch (e) {}
   return localFirebaseConfig;
 };
 
@@ -65,8 +67,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
-
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'vocabularyh-4c909';
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -85,14 +86,11 @@ const App = () => {
   const isTransitioning = useRef(false);
   const nextQuizTimeout = useRef(null);
 
-  // 專業配色定義 (Tailwind Classes)
   const colors = {
-    primary: "bg-[#2D4F1E]", // 深森林綠
+    primary: "bg-[#2D4F1E]", 
     primaryHover: "hover:bg-[#3D662A]",
     accent: "text-[#2D4F1E]",
-    bg: "bg-[#FDFCF8]", // 米白大地色
-    card: "bg-white",
-    border: "border-[#E5E1D8]"
+    bg: "bg-[#FDFCF8]"
   };
 
   useEffect(() => {
@@ -108,9 +106,7 @@ const App = () => {
       }
     };
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
     return () => unsubscribe();
   }, []);
 
@@ -123,9 +119,6 @@ const App = () => {
     const unsubscribe = onSnapshot(wordsRef, (snapshot) => {
       const wordList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setWords(wordList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
-    }, (err) => {
-      console.error("Firestore Error:", err);
-      setErrorMsg("同步失敗：權限不足或路徑錯誤。");
     });
     return () => unsubscribe();
   }, [user]);
@@ -142,27 +135,23 @@ const App = () => {
   const fetchTranslation = async () => {
     if (!newWord.term) return;
     setIsProcessing(true);
-    const apiKey = process.env.REACT_APP_GEMINI_KEY;
+    setErrorMsg(null);
+    const apiKey = ""; // API Key 會由系統注入
     const model = "gemini-2.5-flash-preview-09-2025";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
     try {
-      const translatePrompt = `將${langMode === 'EN' ? '英文' : '日文'}單字 "${newWord.term}" 翻譯成繁體中文，給出最簡短的一個意思。`;
+      const translatePrompt = `將${langMode === 'EN' ? '英文' : '日文'}單字 "${newWord.term}" 翻譯成繁體中文，僅提供最簡短的一個意思。`;
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: translatePrompt }] }]
-        })
+        body: JSON.stringify({ contents: [{ parts: [{ text: translatePrompt }] }] })
       });
-
-      if (!response.ok) throw new Error(`API Error: ${response.status}`);
-
       const result = await response.json();
       const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
       setNewWord(prev => ({ ...prev, definition: text }));
     } catch (err) {
-      console.error("Translation Error:", err);
-      setErrorMsg("翻譯功能暫時無法使用，請手動輸入。");
+      setErrorMsg("翻譯功能暫時無法使用。");
     } finally {
       setIsProcessing(false);
     }
@@ -177,33 +166,24 @@ const App = () => {
         definition: newWord.definition.trim(),
         lang: langMode,
         createdAt: Date.now(),
-        stats: { 
-          mc: { correct: 0, total: 0, archived: false }, 
-          fill: { correct: 0, total: 0, archived: false } 
-        }
+        stats: { mc: { correct: 0, total: 0, archived: false } }
       });
       setNewWord({ term: '', definition: '' });
     } catch (err) { setErrorMsg("儲存失敗。"); }
   };
 
-  const isMatch = (input, target) => {
-    if (!input || !target) return false;
-    const clean = (s) => s.toLowerCase().replace(/[.,!?;:\s、。，！？；：（）()/\-\[\]]/g, '').trim();
-    const cleanInput = clean(input);
-    const parts = target.split(/[、/；;]/).map(p => clean(p)).filter(p => p !== '');
-    return parts.some(p => p === cleanInput);
-  };
-
-  const generateQuiz = (type, currentWords = words) => {
-    const quizType = type.split('-')[1];
-    const eligibleForCurrentMode = currentWords.filter(w => !w.stats?.[quizType]?.archived && w.lang === langMode);
-
-    if (quizType === 'mc' && currentWords.filter(w => w.lang === langMode).length < 3) {
+  const generateQuiz = (currentWords = words) => {
+    // 篩選出目前語言且尚未熟記的單字
+    const eligibleWords = currentWords.filter(w => !w.stats?.mc?.archived && w.lang === langMode);
+    
+    // 如果單字庫總數不足以出題
+    if (currentWords.filter(w => w.lang === langMode).length < 3) {
       setQuizWord(null);
       return;
     }
 
-    if (eligibleForCurrentMode.length === 0) {
+    // 如果沒有尚未熟記的單字了
+    if (eligibleWords.length === 0) {
       setQuizWord(null);
       return;
     }
@@ -219,7 +199,7 @@ const App = () => {
     isTransitioning.current = false;
   };
 
-  const handleQuizAnswer = async (type, answer) => {
+  const handleQuizAnswer = async (answer) => {
     if (quizFeedback || !quizWord || !user || isTransitioning.current) return;
     
     isTransitioning.current = true;
@@ -228,6 +208,7 @@ const App = () => {
     
     const newTotal = currentStats.total + 1;
     const newCorrect = isCorrect ? currentStats.correct + 1 : currentStats.correct;
+    // 答對超過 5 次且正確率 > 70% 則收錄
     const shouldArchive = newCorrect >= 5 && (newCorrect / newTotal) > 0.7;
 
     const updatedStats = { mc: { total: newTotal, correct: newCorrect, archived: shouldArchive } };
@@ -242,6 +223,7 @@ const App = () => {
     const wordRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', quizWord.id);
     updateDoc(wordRef, { stats: updatedStats });
 
+    // 同步本地狀態，讓畫面的進度條能即時更新
     const nextWords = words.map(w => w.id === quizWord.id ? { ...w, stats: updatedStats } : w);
     setWords(nextWords);
 
@@ -250,21 +232,15 @@ const App = () => {
   };
 
   useEffect(() => {
-    if (activeTab.includes('quiz')) {
-      generateQuiz(activeTab);
-    }
+    if (activeTab === 'quiz') generateQuiz();
   }, [activeTab, langMode]);
 
-  const currentLangWordsCount = words.filter(w => w.lang === langMode).length;
-
-  // --- Logo 元件 ---
   const Logo = () => (
     <div className="flex items-center gap-3">
-      <div className="relative w-10 h-10 flex items-center justify-center bg-[#2D4F1E] rounded-xl shadow-lg rotate-3">
+      <div className="w-10 h-10 flex items-center justify-center bg-[#2D4F1E] rounded-xl shadow-lg rotate-3">
         <Compass className="text-white w-6 h-6" />
-        <Leaf className="absolute -top-1 -right-1 text-lime-400 w-4 h-4" />
       </div>
-      <span className="text-2xl tracking-tighter font-black text-[#2D4F1E]">VocabularyHunter</span>
+      <span className="text-2xl font-black text-[#2D4F1E]">VocabHunter</span>
     </div>
   );
 
@@ -272,19 +248,14 @@ const App = () => {
   const archivedCount = words.filter(w => w.lang === langMode && w.stats?.mc?.archived).length;
   const progress = totalCount > 0 ? (archivedCount / totalCount) * 100 : 0;
 
-  if (loading) return <div className={`flex h-screen items-center justify-center ${colors.bg} ${colors.accent} font-bold tracking-widest animate-pulse`}>系統啟動中...</div>;
+  if (loading) return <div className="flex h-screen items-center justify-center font-bold">系統啟動中...</div>;
 
   if (!user) return (
     <div className={`flex h-screen items-center justify-center ${colors.bg} p-6`}>
       <div className="max-w-md w-full bg-white p-10 rounded-[40px] shadow-2xl text-center border">
-        <div className="mb-10 flex justify-center scale-110">
-          <Logo />
-        </div>
-        <h1 className="text-xl font-bold mb-4 text-[#2D4F1E]">智慧單字探險家</h1>
-        <p className="text-stone-400 mb-10 font-medium italic">尋找知識的足跡</p>
-        <button onClick={() => signInWithPopup(auth, provider)} className={`w-full ${colors.primary} ${colors.primaryHover} text-white py-5 rounded-2xl font-bold transition-all shadow-lg active:scale-95`}>
-          開始探險之旅 (Google 登入)
-        </button>
+        <div className="mb-10 flex justify-center scale-110"><Logo /></div>
+        <h1 className="text-xl font-bold mb-8 text-[#2D4F1E]">智慧單字探險家</h1>
+        <button onClick={() => signInWithPopup(auth, provider)} className={`w-full ${colors.primary} text-white py-5 rounded-2xl font-bold shadow-lg`}>Google 快速登入</button>
       </div>
     </div>
   );
@@ -295,33 +266,31 @@ const App = () => {
         <Logo />
         <div className="flex items-center gap-4">
           <div className="bg-stone-100 p-1 rounded-xl flex border">
-            <button onClick={() => setLangMode('EN')} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${langMode === 'EN' ? 'bg-[#2D4F1E] text-white shadow-sm' : 'text-stone-400'}`}>EN</button>
-            <button onClick={() => setLangMode('JP')} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${langMode === 'JP' ? 'bg-orange-800 text-white shadow-sm' : 'text-stone-400'}`}>JP</button>
+            <button onClick={() => setLangMode('EN')} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${langMode === 'EN' ? 'bg-[#2D4F1E] text-white' : 'text-stone-400'}`}>EN</button>
+            <button onClick={() => setLangMode('JP')} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${langMode === 'JP' ? 'bg-orange-800 text-white' : 'text-stone-400'}`}>JP</button>
           </div>
-          <button onClick={() => signOut(auth)} className="p-2 text-stone-300 hover:text-red-700 transition-colors"><LogOut size={20} /></button>
+          <button onClick={() => signOut(auth)} className="p-2 text-stone-300 hover:text-red-700"><LogOut size={20} /></button>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 md:p-8">
         <div className="flex bg-[#E5E1D8] p-1 rounded-2xl shadow-inner border mb-8">
-          <button onClick={() => setActiveTab('list')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${activeTab === 'list' ? 'bg-white text-[#2D4F1E] shadow-sm' : 'text-stone-500'}`}>獵場單字庫</button>
-          <button onClick={() => setActiveTab('quiz')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${activeTab === 'quiz' ? 'bg-white text-[#2D4F1E] shadow-sm' : 'text-stone-500'}`}>選擇挑戰</button>
+          <button onClick={() => setActiveTab('list')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'list' ? 'bg-white text-[#2D4F1E] shadow-sm' : 'text-stone-500'}`}>獵場單字庫</button>
+          <button onClick={() => setActiveTab('quiz')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'quiz' ? 'bg-white text-[#2D4F1E] shadow-sm' : 'text-stone-500'}`}>選擇挑戰</button>
         </div>
 
         {activeTab === 'list' ? (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             <div className="bg-white p-6 rounded-3xl shadow-sm border-2 border-stone-100">
               <form onSubmit={addWord} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="relative">
-                    <input type="text" placeholder="輸入新的獵物 (單字)..." className="w-full px-5 py-4 bg-stone-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-[#2D4F1E] outline-none font-bold transition-all placeholder:text-stone-300" value={newWord.term} onChange={(e) => setNewWord({ ...newWord, term: e.target.value })} />
-                    <button type="button" onClick={fetchTranslation} className="absolute right-4 top-4 text-[#2D4F1E] hover:scale-110 transition-transform">
-                      {isProcessing ? <Loader2 className="animate-spin" /> : <Search />}
-                    </button>
+                    <input type="text" placeholder="輸入單字..." className="w-full px-5 py-4 bg-stone-50 border-2 border-transparent rounded-2xl focus:border-[#2D4F1E] outline-none font-bold" value={newWord.term} onChange={(e) => setNewWord({ ...newWord, term: e.target.value })} />
+                    <button type="button" onClick={fetchTranslation} className="absolute right-4 top-4 text-[#2D4F1E]">{isProcessing ? <Loader2 className="animate-spin" /> : <Search />}</button>
                   </div>
-                  <input type="text" placeholder="翻譯結果" className="w-full px-5 py-4 bg-stone-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-[#2D4F1E] outline-none font-medium transition-all" value={newWord.definition} onChange={(e) => setNewWord({ ...newWord, definition: e.target.value })} />
+                  <input type="text" placeholder="翻譯結果" className="w-full px-5 py-4 bg-stone-50 border-2 border-transparent rounded-2xl focus:border-[#2D4F1E] outline-none" value={newWord.definition} onChange={(e) => setNewWord({ ...newWord, definition: e.target.value })} />
                 </div>
-                <button type="submit" className={`w-full py-4 rounded-2xl font-black text-white transition-all active:scale-[0.98] shadow-lg ${colors.primary} ${colors.primaryHover}`}>收錄到皮箱</button>
+                <button type="submit" className={`w-full py-4 rounded-2xl font-black text-white shadow-lg ${colors.primary}`}>收錄到皮箱</button>
               </form>
             </div>
             
@@ -342,25 +311,13 @@ const App = () => {
             </div>
           </div>
         ) : (
-          <div className="max-w-md mx-auto bg-white p-10 rounded-[40px] shadow-2xl border-2 border-stone-100 text-center min-h-[520px] flex flex-col justify-center relative overflow-hidden">
-            
-            {quizFeedback && (
-              <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-8 bg-white/95 backdrop-blur-xl rounded-[40px] animate-in fade-in zoom-in duration-200">
-                {quizFeedback.isArchived ? (
-                  <div className="text-center">
-                    <Medal size={120} className="text-[#2D4F1E] mx-auto mb-6 drop-shadow-md animate-bounce" />
-                    <h2 className="text-3xl font-black mb-2 text-stone-800">狩獵成功！</h2>
-                    <p className="text-[#2D4F1E] font-bold text-2xl mb-4">"{quizFeedback.term}"</p>
-                    <p className="text-stone-400 font-medium tracking-wide">此單字已完全進入你的獵人皮箱</p>
-                  </div>
-                ) : (
-                  <div className="max-w-md mx-auto bg-white p-10 rounded-[40px] shadow-2xl border-2 border-stone-100 text-center min-h-[450px] flex flex-col justify-center relative overflow-hidden">
+          <div className="max-w-md mx-auto bg-white p-10 rounded-[40px] shadow-2xl border-2 border-stone-100 text-center min-h-[450px] flex flex-col justify-center relative overflow-hidden">
             {quizFeedback && (
               <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-8 bg-white/95 backdrop-blur-xl rounded-[40px] animate-in fade-in zoom-in">
                 {quizFeedback.isArchived ? (
                   <div className="text-center">
                     <Medal size={100} className="text-[#2D4F1E] mx-auto mb-6 animate-bounce" />
-                    <h2 className="text-3xl font-black mb-2">獵取成功！</h2>
+                    <h2 className="text-3xl font-black mb-2 text-stone-800">獵取成功！</h2>
                     <p className="text-[#2D4F1E] font-bold text-2xl">"{quizFeedback.term}"</p>
                   </div>
                 ) : (
@@ -384,18 +341,19 @@ const App = () => {
                 ) : (
                   <>
                     <Trophy size={64} className="text-[#2D4F1E] mb-6" />
-                    <h3 className="text-xl font-bold">所有單字已熟記！</h3>
+                    <h3 className="text-xl font-bold text-stone-800">恭喜！獵場已淨空</h3>
+                    <p className="text-stone-500 mt-2">單字皆已進入皮箱</p>
                   </>
                 )}
-                <button onClick={() => setActiveTab('list')} className={`mt-4 ${colors.primary} text-white px-8 py-3 rounded-xl font-bold`}>去尋找更多獵物</button>
+                <button onClick={() => setActiveTab('list')} className={`mt-4 ${colors.primary} text-white px-8 py-3 rounded-xl font-bold`}>前往獵場</button>
               </div>
             ) : (
-              <div>
-                <button onClick={() => speak(quizWord.term, quizWord.lang)} className="p-5 bg-stone-50 text-[#2D4F1E] rounded-full border mb-8"><Volume2 size={40}/></button>
+              <div className="animate-in fade-in">
+                <button onClick={() => speak(quizWord.term, quizWord.lang)} className="p-5 bg-stone-50 text-[#2D4F1E] rounded-full border mb-8 active:scale-95 transition-transform"><Volume2 size={40}/></button>
                 <h2 className="text-5xl font-black mb-12 text-stone-800 tracking-tight">{quizWord.term}</h2>
                 <div className="grid gap-3">
                   {options.map((opt, i) => (
-                    <button key={i} onClick={() => handleQuizAnswer(opt)} className="py-4 px-6 bg-stone-50 border-2 border-stone-200 rounded-2xl font-bold text-stone-700 hover:border-[#2D4F1E] hover:bg-white transition-all">{opt}</button>
+                    <button key={i} onClick={() => handleQuizAnswer(opt)} className="py-4 px-6 bg-stone-50 border-2 border-stone-200 rounded-2xl font-bold text-stone-700 hover:border-[#2D4F1E] hover:bg-white transition-all active:scale-95">{opt}</button>
                   ))}
                 </div>
               </div>
@@ -408,7 +366,7 @@ const App = () => {
         <div className="max-w-4xl mx-auto bg-white/95 backdrop-blur-md border border-stone-200 p-5 rounded-[30px] shadow-2xl flex items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <Compass className="text-[#2D4F1E]" size={20} />
-            <span className="font-black text-stone-700">探險進度{archivedCount} / {totalCount}</span>
+            <span className="font-black text-stone-700">探險進度：{archivedCount} / {totalCount}</span>
           </div>
           <div className="flex-1 h-3 bg-stone-100 rounded-full overflow-hidden border">
             <div className="h-full bg-[#2D4F1E] transition-all duration-1000" style={{ width: `${progress}%` }}></div>
