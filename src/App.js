@@ -130,10 +130,6 @@ const App = () => {
     return () => unsubscribe();
   }, [user]);
 
-  const totalCount = words.length;
-  const archivedCount = words.filter(w => w.stats?.mc?.archived && w.stats?.fill?.archived).length;
-  const archivePercentage = totalCount > 0 ? (archivedCount / totalCount) * 100 : 0;
-
   const speak = (text, lang) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
