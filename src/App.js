@@ -53,7 +53,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'vocabularyh-4c909';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
 
 const App = () => {
   const [user, setUser] = useState(null);
