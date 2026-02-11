@@ -37,28 +37,25 @@ import {
 } from 'lucide-react';
 
 // ========================================================
-// 🛠️ 安全環境配置 (解決 process is not defined)
+// 🛠️ Firebase 與 環境配置修正 (解決環境變數報錯與 1.5-flash 更新)
 // ========================================================
 const isCanvas = typeof __app_id !== 'undefined';
 
-const getEnv = (key, fallback) => {
-  try {
-    // 支援 Vite 環境
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
-      return import.meta.env[key];
-    }
-    // 支援 CRA/Node 環境
-    if (typeof process !== 'undefined' && process.env && process.env[key]) {
-      return process.env[key];
-    }
-  } catch (e) {}
-  return fallback;
-};
-
+// 安全地獲取配置，避免直接讀取不存在的 process 或 import.meta
 let firebaseConfig = {};
 if (isCanvas && typeof __firebase_config !== 'undefined') {
   firebaseConfig = JSON.parse(__firebase_config);
 } else {
+  // 非 Canvas 環境的防錯讀取邏輯
+  const getEnv = (key, fallback) => {
+    try {
+      // 檢查全域變數或各種可能的環境變數容器
+      const env = (typeof process !== 'undefined' && process.env) || (typeof window !== 'undefined' && window._env_);
+      if (env && env[key]) return env[key];
+    } catch (e) {}
+    return fallback;
+  };
+
   firebaseConfig = {
     apiKey: getEnv('REACT_APP_FIREBASE_API_KEY', ""), 
     authDomain: getEnv('REACT_APP_FIREBASE_AUTH_DOMAIN', "vocabularyh-4c909.firebaseapp.com"),
@@ -69,8 +66,9 @@ if (isCanvas && typeof __firebase_config !== 'undefined') {
   };
 }
 
-const geminiApiKey = isCanvas ? "" : getEnv('REACT_APP_GEMINI_KEY', "");
-const GEMINI_MODEL = "gemini-1.5-flash"; // 使用 1.5-flash 確保額度充裕
+// Gemini API Key 處理
+const geminiApiKey = isCanvas ? "" : (typeof process !== 'undefined' ? process.env?.REACT_APP_GEMINI_KEY : "");
+const GEMINI_MODEL = "gemini-1.5-flash"; // 統一更新為 1.5 flash
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -79,20 +77,25 @@ const googleProvider = new GoogleAuthProvider();
 const appId = isCanvas ? __app_id : 'multilang-vocab-master';
 
 // ========================================================
-// 🛡️ API 輔助函式
+// 🛡️ API 輔助函式：實作 Exponential Backoff
 // ========================================================
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   let delay = 1000;
   for (let i = 0; i < maxRetries; i++) {
-    const response = await fetch(url, options);
-    if (response.status === 429) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 429) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+        continue;
+      }
+      return response;
+    } catch (e) {
+      if (i === maxRetries - 1) throw e;
       await new Promise(resolve => setTimeout(resolve, delay));
       delay *= 2;
-      continue;
     }
-    return response;
   }
-  return fetch(url, options);
 };
 
 const App = () => {
@@ -115,15 +118,14 @@ const App = () => {
 
   const currentLangWords = words.filter(w => w.lang === langMode);
 
-  // 初始化 Auth
+  // 初始化 Auth (遵循 Rule 3)
   useEffect(() => {
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          // 這裡不自動匿名登入，讓用戶手動選，除非是在 Canvas 環境
-          if (isCanvas) await signInAnonymously(auth);
+          await signInAnonymously(auth);
         }
       } catch (err) {
         console.error("Auth init error:", err);
@@ -138,13 +140,14 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // 資料監聽
+  // 資料監聽 (遵循 Rule 1)
   useEffect(() => {
     if (!user) return;
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
     const unsubscribe = onSnapshot(wordsRef, 
       (snapshot) => {
         const wordList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Rule 2: 記憶體內排序
         setWords(wordList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
       },
       (err) => setErrorMsg("資料庫連線異常")
@@ -208,7 +211,7 @@ const App = () => {
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       });
 
-      if (!response.ok) throw new Error("翻譯助手目前無法回應");
+      if (!response?.ok) throw new Error("翻譯助手目前無法回應");
 
       const data = await response.json();
       const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -248,7 +251,7 @@ const App = () => {
         })
       });
 
-      if (!response.ok) throw new Error("解析失敗");
+      if (!response?.ok) throw new Error("解析失敗");
 
       const data = await response.json();
       const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
@@ -397,9 +400,9 @@ const App = () => {
               {user.isAnonymous ? (
                 <div className="w-7 h-7 rounded-full bg-stone-300 flex items-center justify-center text-stone-600"><UserIcon size={14} /></div>
               ) : (
-                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2D4F1E&color=fff`} className="w-7 h-7 rounded-full border border-stone-200" alt="Avatar" />
+                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2D4F1E&color=fff`} className="w-7 h-7 rounded-full border border-stone-200" alt="U" />
               )}
-              <span className="text-[10px] font-black text-stone-500 pr-1 uppercase truncate max-w-[60px]">{user.isAnonymous ? 'Guest' : (user.displayName || 'User')}</span>
+              <span className="text-[10px] font-black text-stone-500 pr-1 uppercase">{user.isAnonymous ? 'Guest' : (user.displayName || 'User')}</span>
             </div>
             <button onClick={handleSignOut} className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all rounded-full hover:bg-red-50">
               <LogOut size={18}/>
