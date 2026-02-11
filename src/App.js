@@ -38,26 +38,41 @@ import {
 } from 'lucide-react';
 
 // ========================================================
-// 🛡️ 環境變數安全存取工具
+// 🛡️ 環境變數相容性工具 (支援 Vite, CRA, 與 Canvas)
 // ========================================================
 const getEnv = (key, fallback = "") => {
+  // 1. 優先嘗試 Vite 的 import.meta.env
   try {
-    if (typeof process !== 'undefined' && process.env) {
-      return process.env[key] || fallback;
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      const viteKey = key.startsWith('REACT_APP_') ? key.replace('REACT_APP_', 'VITE_') : key;
+      if (import.meta.env[viteKey]) return import.meta.env[viteKey];
+      if (import.meta.env[key]) return import.meta.env[key];
     }
   } catch (e) {}
+
+  // 2. 嘗試傳統的 process.env (CRA)
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env[key]) {
+      return process.env[key];
+    }
+  } catch (e) {}
+
   return fallback;
 };
 
 const isCanvas = typeof __app_id !== 'undefined';
 
-// Firebase 配置
+// ========================================================
+// 🔥 Firebase 配置初始化
+// ========================================================
 let firebaseConfig = {};
+
 if (isCanvas && typeof __firebase_config !== 'undefined') {
   firebaseConfig = JSON.parse(__firebase_config);
 } else {
+  // 在真實網站環境，請確保 Netlify 有設定這些環境變數
   firebaseConfig = {
-    apiKey: getEnv('REACT_APP_FIREBASE_API_KEY', ""),
+    apiKey: getEnv('REACT_APP_FIREBASE_API_KEY'),
     authDomain: getEnv('REACT_APP_FIREBASE_AUTH_DOMAIN', "vocabularyh-4c909.firebaseapp.com"),
     projectId: getEnv('REACT_APP_FIREBASE_PROJECT_ID', "vocabularyh-4c909"),
     storageBucket: getEnv('REACT_APP_FIREBASE_STORAGE_BUCKET', "vocabularyh-4c909.firebasestorage.app"),
@@ -66,9 +81,13 @@ if (isCanvas && typeof __firebase_config !== 'undefined') {
   };
 }
 
-// Gemini 配置
+// 檢查是否漏掉 API Key (這是你報錯的主因)
+if (!firebaseConfig.apiKey && !isCanvas) {
+  console.error("Firebase API Key is missing! 檢查環境變數設定。");
+}
+
 const geminiApiKey = isCanvas ? "" : getEnv('REACT_APP_GEMINI_KEY', "");
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025"; // 使用最新的模型
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -77,9 +96,10 @@ const googleProvider = new GoogleAuthProvider();
 const appId = isCanvas ? __app_id : 'multilang-vocab-master';
 
 // ========================================================
-// 🛡️ API 輔助函式
+// 🛡️ API 輔助函式 (Gemini 2.5 Flash)
 // ========================================================
 const fetchGemini = async (prompt, isJson = false) => {
+  // Canvas 環境使用特定的 Proxy URL，外部環境使用標準 API URL
   const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
   const url = isCanvas ? baseUrl : `${baseUrl}?key=${geminiApiKey}`;
   
@@ -143,15 +163,23 @@ const App = () => {
 
   const currentLangWords = words.filter(w => w.lang === langMode);
 
+  // 初始化 Auth
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          await signInAnonymously(auth);
+          // 在外部環境，如果 Firebase 配置正確，這裡不會報錯
+          // 如果沒有 Token 則嘗試匿名登入
+          if (!auth.currentUser) {
+            await signInAnonymously(auth);
+          }
         }
-      } catch (err) {}
+      } catch (err) {
+        console.error("Auth Initialization Error:", err);
+        setErrorMsg("身份驗證初始化失敗，請檢查 API Key 設定。");
+      }
     };
     initAuth();
 
@@ -162,6 +190,7 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
+  // 監聽資料庫
   useEffect(() => {
     if (!user) return;
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
@@ -170,11 +199,15 @@ const App = () => {
         const wordList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setWords(wordList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
       },
-      () => setErrorMsg("資料庫連線異常")
+      (err) => {
+        console.error("Firestore Error:", err);
+        setErrorMsg("資料庫讀取失敗：權限不足或配置錯誤");
+      }
     );
     return () => unsubscribe();
   }, [user]);
 
+  // 其他邏輯保持不變...
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
@@ -570,7 +603,6 @@ const App = () => {
                     </div>
                   </section>
 
-                  {/* 🔄 近義字區塊：已修復並重新加入 */}
                   <section>
                     <div className="flex items-center gap-2 mb-3">
                       <Layers size={16} className="text-[#C2410C]" />
