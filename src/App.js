@@ -21,8 +21,6 @@ import {
 import { 
   Volume2, 
   Trash2, 
-  CheckCircle2, 
-  XCircle, 
   Compass, 
   Trophy, 
   Search, 
@@ -34,7 +32,9 @@ import {
   Plus,
   LogIn,
   Target,
-  AlertCircle
+  AlertCircle,
+  User as UserIcon,
+  XCircle
 } from 'lucide-react';
 
 // ========================================================
@@ -45,16 +45,15 @@ const isCanvas = typeof __app_id !== 'undefined';
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "", 
-      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "vocabularyh-4c909.firebaseapp.com",
-      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "vocabularyh-4c909",
-      storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "vocabularyh-4c909.firebasestorage.app",
-      messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "924954723346",
-      appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:924954723346:web:cc792c2fdd317fb96684cb",
+      apiKey: "", 
+      authDomain: "vocabularyh-4c909.firebaseapp.com",
+      projectId: "vocabularyh-4c909",
+      storageBucket: "vocabularyh-4c909.firebasestorage.app",
+      messagingSenderId: "924954723346",
+      appId: "1:924954723346:web:cc792c2fdd317fb96684cb",
     };
 
-// Gemini API Key: Canvas 模式必須為空字串，本地開發則使用環境變數
-const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
+const geminiApiKey = "";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -71,26 +70,30 @@ const App = () => {
   const [newWord, setNewWord] = useState({ term: '', definition: '' });
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-  
-  // 顯示防呆提示狀態
   const [duplicateAlert, setDuplicateAlert] = useState(false);
-
-  // 詳解面板狀態
   const [selectedWord, setSelectedWord] = useState(null);
   const [explanation, setExplanation] = useState(null);
   const [isExplaining, setIsExplaining] = useState(false);
-
-  // 測驗狀態
   const [quizWord, setQuizWord] = useState(null);
   const [options, setOptions] = useState([]);
   const [quizFeedback, setQuizFeedback] = useState(null); 
   const isTransitioning = useRef(false);
 
-  // 計算當前語言的單字
   const currentLangWords = words.filter(w => w.lang === langMode);
 
-  // 1. 初始化 Auth 監聽
+  // 初始化驗證
   useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        }
+      } catch (err) {
+        console.error("Auth init error:", err);
+      }
+    };
+    initAuth();
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
@@ -98,13 +101,11 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. 登入邏輯
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
-      console.error("Google Login Error:", err);
       setErrorMsg("Google 登入失敗");
     } finally {
       setLoading(false);
@@ -114,11 +115,7 @@ const App = () => {
   const handleAnonymousLogin = async () => {
     setLoading(true);
     try {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
+      await signInAnonymously(auth);
     } catch (err) {
       setErrorMsg("匿名登入失敗");
     } finally {
@@ -129,6 +126,7 @@ const App = () => {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
+      // 清空狀態
       setUser(null);
       setWords([]);
       setSelectedWord(null);
@@ -137,7 +135,7 @@ const App = () => {
     }
   };
 
-  // 3. 監聽 Firestore
+  // 監聽單字庫
   useEffect(() => {
     if (!user) return;
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
@@ -151,7 +149,6 @@ const App = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // 工具函數
   const speak = (text, lang) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -222,14 +219,13 @@ const App = () => {
     e.preventDefault();
     if (!newWord.term || !newWord.definition || !user) return;
 
-    // 防呆機制：檢查是否重複
     const isDuplicate = currentLangWords.some(
       w => w.term.toLowerCase().trim() === newWord.term.toLowerCase().trim()
     );
 
     if (isDuplicate) {
       setDuplicateAlert(true);
-      setTimeout(() => setDuplicateAlert(false), 3000); // 3秒後自動消失
+      setTimeout(() => setDuplicateAlert(false), 3000);
       return;
     }
 
@@ -254,7 +250,7 @@ const App = () => {
     const stats = quizWord.stats?.mc || { correct: 0, total: 0, archived: false };
     const newTotal = stats.total + 1;
     const newCorrect = isCorrect ? stats.correct + 1 : stats.correct;
-    const shouldArchive = newCorrect >= 3 && (newCorrect / newTotal) >= 0.65;
+    const shouldArchive = newCorrect >= 3 && (newCorrect / newTotal) >= 0.7;
 
     setQuizFeedback({ 
       status: isCorrect ? 'correct' : 'wrong', 
@@ -271,14 +267,12 @@ const App = () => {
       console.error("Update error:", e);
     }
     
-    const waitTime = isCorrect ? (shouldArchive ? 1500 : 1300) : 1500; 
-    
     setTimeout(() => {
         setQuizFeedback(null);
         if (activeTab === 'quiz') {
           generateQuiz();
         }
-    }, waitTime);
+    }, 1500);
   };
 
   const generateQuiz = (currentWords = words) => {
@@ -351,13 +345,12 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#FDFCF8] text-stone-800 pb-28 font-sans overflow-x-hidden">
-      {/* 頂部導航 */}
       <header className="bg-white/80 backdrop-blur-lg border-b sticky top-0 z-40 px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 flex items-center justify-center bg-[#2D4F1E] rounded-lg shadow-lg">
             <Compass className="text-white w-5 h-5" />
           </div>
-          <span className="text-xl font-black text-[#2D4F1E]">VocabHunter</span>
+          <span className="text-xl font-black text-[#2D4F1E] hidden sm:inline">VocabHunter</span>
         </div>
         
         <div className="flex items-center gap-2">
@@ -366,31 +359,50 @@ const App = () => {
             <button onClick={() => setLangMode('JP')} className={`px-3 py-1 rounded-md transition-all ${langMode === 'JP' ? 'bg-[#C2410C] text-white' : 'text-stone-400'}`}>JP</button>
           </div>
           
-          <div className="flex items-center gap-1.5 pl-2 border-l border-stone-100">
-            {user.photoURL ? (
-              <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border border-stone-200" />
+          <div className="flex items-center gap-2 pl-2 border-l border-stone-100">
+            {user.isAnonymous ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-stone-100 px-2 py-1 rounded-full border border-stone-200">
+                  <div className="w-7 h-7 rounded-full bg-stone-300 flex items-center justify-center text-stone-600">
+                    <UserIcon size={14} />
+                  </div>
+                  <span className="text-[10px] font-black text-stone-500 pr-1">GUEST</span>
+                </div>
+                <button 
+                  onClick={handleSignOut} 
+                  className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all rounded-full hover:bg-red-50"
+                  title="登出訪客模式"
+                >
+                  <LogOut size={18}/>
+                </button>
+              </div>
             ) : (
-              <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-400 border border-stone-200">
-                <LogIn size={14} />
+              <div className="flex items-center gap-2">
+                <div className="relative group">
+                  <img 
+                    src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2D4F1E&color=fff`} 
+                    alt="User" 
+                    className="w-8 h-8 rounded-full border border-stone-200 object-cover" 
+                  />
+                </div>
+                <button 
+                  onClick={handleSignOut} 
+                  className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all rounded-full hover:bg-red-50"
+                  title="登出帳號"
+                >
+                  <LogOut size={18}/>
+                </button>
               </div>
             )}
-            <button 
-              onClick={handleSignOut} 
-              className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all flex items-center justify-center"
-              title="登出"
-            >
-              <LogOut size={20}/>
-            </button>
           </div>
         </div>
       </header>
 
-      {/* 防呆提示訊息 */}
       {duplicateAlert && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top-4 fade-in duration-300">
           <div className="bg-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-red-400">
             <AlertCircle size={20} />
-            <span className="font-black text-sm">此單字已在獵場中，換一個吧！</span>
+            <span className="font-black text-sm">此單字已在獵場中！</span>
           </div>
         </div>
       )}
@@ -515,7 +527,6 @@ const App = () => {
         )}
       </main>
 
-      {/* 詳解面板 */}
       {selectedWord && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 animate-in fade-in duration-200">
           <div className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
@@ -573,7 +584,6 @@ const App = () => {
         </div>
       )}
 
-      {/* 固定進度條 */}
       <div className="fixed bottom-0 left-0 right-0 p-4 z-40">
         <div className="max-w-2xl mx-auto bg-white/90 backdrop-blur-xl border border-stone-100 p-3 rounded-2xl shadow-xl flex items-center gap-4">
           <div className="flex flex-col items-center min-w-[50px]">
