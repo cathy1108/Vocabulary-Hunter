@@ -68,7 +68,7 @@ if (isCanvas && typeof __firebase_config !== 'undefined') {
 
 // Gemini API Key 處理
 const geminiApiKey = isCanvas ? "" : (typeof process !== 'undefined' ? process.env?.REACT_APP_GEMINI_KEY : "");
-const GEMINI_MODEL = "gemini-1.5-flash"; // 統一更新為 1.5 flash
+const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025"; // 統一更新為 1.5 flash
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
