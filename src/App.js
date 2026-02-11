@@ -37,21 +37,22 @@ import {
 } from 'lucide-react';
 
 // ========================================================
-// 🛠️ Firebase 與 環境配置修正 (解決環境變數報錯與 1.5-flash 更新)
+// 🛠️ Firebase 與 環境配置修正 (解決 auth/invalid-api-key)
 // ========================================================
 const isCanvas = typeof __app_id !== 'undefined';
 
-// 安全地獲取配置，避免直接讀取不存在的 process 或 import.meta
+// 安全地獲取系統預置配置或回退到本地環境變數
 let firebaseConfig = {};
 if (isCanvas && typeof __firebase_config !== 'undefined') {
+  // 在 Canvas 環境中，優先使用系統提供的配置
   firebaseConfig = JSON.parse(__firebase_config);
 } else {
-  // 非 Canvas 環境的防錯讀取邏輯
+  // 非 Canvas 環境，使用本地定義 (確保 process 不會報錯)
   const getEnv = (key, fallback) => {
     try {
-      // 檢查全域變數或各種可能的環境變數容器
-      const env = (typeof process !== 'undefined' && process.env) || (typeof window !== 'undefined' && window._env_);
-      if (env && env[key]) return env[key];
+      if (typeof process !== 'undefined' && process.env && process.env[key]) {
+        return process.env[key];
+      }
     } catch (e) {}
     return fallback;
   };
@@ -66,9 +67,8 @@ if (isCanvas && typeof __firebase_config !== 'undefined') {
   };
 }
 
-// Gemini API Key 處理
-const geminiApiKey = isCanvas ? "" : (typeof process !== 'undefined' ? process.env?.REACT_APP_GEMINI_KEY : "");
-const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025"; // 統一更新為 1.5 flash
+// Gemini API Key 處理：在 Canvas 環境下保持為空，本地環境下則讀取環境變數
+const geminiApiKey = isCanvas ? "" : (process?.env?.REACT_APP_GEMINI_KEY || "");
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -82,20 +82,15 @@ const appId = isCanvas ? __app_id : 'multilang-vocab-master';
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   let delay = 1000;
   for (let i = 0; i < maxRetries; i++) {
-    try {
-      const response = await fetch(url, options);
-      if (response.status === 429) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-        continue;
-      }
-      return response;
-    } catch (e) {
-      if (i === maxRetries - 1) throw e;
+    const response = await fetch(url, options);
+    if (response.status === 429) {
       await new Promise(resolve => setTimeout(resolve, delay));
       delay *= 2;
+      continue;
     }
+    return response;
   }
+  return fetch(url, options);
 };
 
 const App = () => {
@@ -118,7 +113,6 @@ const App = () => {
 
   const currentLangWords = words.filter(w => w.lang === langMode);
 
-  // 初始化 Auth (遵循 Rule 3)
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -140,14 +134,13 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // 資料監聽 (遵循 Rule 1)
+  // 資料監聽：遵循 RULE 3，確保 user 存在後才發起請求
   useEffect(() => {
     if (!user) return;
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
     const unsubscribe = onSnapshot(wordsRef, 
       (snapshot) => {
         const wordList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Rule 2: 記憶體內排序
         setWords(wordList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
       },
       (err) => setErrorMsg("資料庫連線異常")
@@ -203,7 +196,7 @@ const App = () => {
     setErrorMsg(null);
     try {
       const prompt = `Translate this ${langMode === 'EN' ? 'English' : 'Japanese'} word to Traditional Chinese: "${newWord.term}". Just provide the most common one-word meaning. No extra text.`;
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${geminiApiKey}`;
       
       const response = await fetchWithRetry(url, {
         method: 'POST',
@@ -211,7 +204,7 @@ const App = () => {
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       });
 
-      if (!response?.ok) throw new Error("翻譯助手目前無法回應");
+      if (!response.ok) throw new Error("翻譯助手目前無法回應");
 
       const data = await response.json();
       const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -240,7 +233,7 @@ const App = () => {
         "tips": "memory tip"
       }`;
       
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${geminiApiKey}`;
       
       const response = await fetchWithRetry(url, {
         method: 'POST',
@@ -251,7 +244,7 @@ const App = () => {
         })
       });
 
-      if (!response?.ok) throw new Error("解析失敗");
+      if (!response.ok) throw new Error("解析失敗");
 
       const data = await response.json();
       const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
