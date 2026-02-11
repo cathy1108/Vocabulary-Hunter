@@ -33,7 +33,8 @@ import {
   X,
   Plus,
   LogIn,
-  Target
+  Target,
+  AlertCircle
 } from 'lucide-react';
 
 // ========================================================
@@ -71,6 +72,9 @@ const App = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   
+  // 顯示防呆提示狀態
+  const [duplicateAlert, setDuplicateAlert] = useState(false);
+
   // 詳解面板狀態
   const [selectedWord, setSelectedWord] = useState(null);
   const [explanation, setExplanation] = useState(null);
@@ -81,6 +85,9 @@ const App = () => {
   const [options, setOptions] = useState([]);
   const [quizFeedback, setQuizFeedback] = useState(null); 
   const isTransitioning = useRef(false);
+
+  // 計算當前語言的單字
+  const currentLangWords = words.filter(w => w.lang === langMode);
 
   // 1. 初始化 Auth 監聽
   useEffect(() => {
@@ -214,6 +221,18 @@ const App = () => {
   const addWord = async (e) => {
     e.preventDefault();
     if (!newWord.term || !newWord.definition || !user) return;
+
+    // 防呆機制：檢查是否重複
+    const isDuplicate = currentLangWords.some(
+      w => w.term.toLowerCase().trim() === newWord.term.toLowerCase().trim()
+    );
+
+    if (isDuplicate) {
+      setDuplicateAlert(true);
+      setTimeout(() => setDuplicateAlert(false), 3000); // 3秒後自動消失
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'vocab'), {
         term: newWord.term.trim(),
@@ -223,6 +242,7 @@ const App = () => {
         stats: { mc: { correct: 0, total: 0, archived: false } }
       });
       setNewWord({ term: '', definition: '' });
+      setDuplicateAlert(false);
     } catch (err) {}
   };
 
@@ -234,7 +254,7 @@ const App = () => {
     const stats = quizWord.stats?.mc || { correct: 0, total: 0, archived: false };
     const newTotal = stats.total + 1;
     const newCorrect = isCorrect ? stats.correct + 1 : stats.correct;
-    const shouldArchive = newCorrect >= 4 && (newCorrect / newTotal) >= 0.7;
+    const shouldArchive = newCorrect >= 3 && (newCorrect / newTotal) >= 0.65;
 
     setQuizFeedback({ 
       status: isCorrect ? 'correct' : 'wrong', 
@@ -251,7 +271,7 @@ const App = () => {
       console.error("Update error:", e);
     }
     
-    const waitTime = isCorrect ? (shouldArchive ? 2200 : 1800) : 2000; 
+    const waitTime = isCorrect ? (shouldArchive ? 1500 : 1300) : 1500; 
     
     setTimeout(() => {
         setQuizFeedback(null);
@@ -288,7 +308,6 @@ const App = () => {
     }
   }, [activeTab, langMode, words]);
 
-  const currentLangWords = words.filter(w => w.lang === langMode);
   const archivedCount = currentLangWords.filter(w => w.stats?.mc?.archived).length;
   const progress = currentLangWords.length > 0 ? (archivedCount / currentLangWords.length) * 100 : 0;
 
@@ -342,13 +361,11 @@ const App = () => {
         </div>
         
         <div className="flex items-center gap-2">
-          {/* 語言切換 */}
           <div className="bg-stone-100 p-1 rounded-lg flex border text-[10px] font-black mr-2">
             <button onClick={() => setLangMode('EN')} className={`px-3 py-1 rounded-md transition-all ${langMode === 'EN' ? 'bg-[#2D4F1E] text-white' : 'text-stone-400'}`}>EN</button>
             <button onClick={() => setLangMode('JP')} className={`px-3 py-1 rounded-md transition-all ${langMode === 'JP' ? 'bg-[#C2410C] text-white' : 'text-stone-400'}`}>JP</button>
           </div>
           
-          {/* 用戶頭像與登出按鈕 */}
           <div className="flex items-center gap-1.5 pl-2 border-l border-stone-100">
             {user.photoURL ? (
               <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border border-stone-200" />
@@ -367,6 +384,16 @@ const App = () => {
           </div>
         </div>
       </header>
+
+      {/* 防呆提示訊息 */}
+      {duplicateAlert && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="bg-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-red-400">
+            <AlertCircle size={20} />
+            <span className="font-black text-sm">此單字已在獵場中，換一個吧！</span>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-4xl mx-auto p-4 md:p-6">
         <div className="flex bg-stone-200/50 p-1 rounded-xl mb-6 shadow-inner">
@@ -387,9 +414,12 @@ const App = () => {
                     <input 
                       type="text" 
                       placeholder="單字..." 
-                      className="w-full px-4 py-3 bg-stone-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-[#2D4F1E] outline-none font-bold text-sm transition-all" 
+                      className={`w-full px-4 py-3 bg-stone-50 border-2 rounded-xl focus:bg-white focus:border-[#2D4F1E] outline-none font-bold text-sm transition-all ${duplicateAlert ? 'border-red-500 animate-shake' : 'border-transparent'}`} 
                       value={newWord.term} 
-                      onChange={(e) => setNewWord({ ...newWord, term: e.target.value })} 
+                      onChange={(e) => {
+                        setNewWord({ ...newWord, term: e.target.value });
+                        if (duplicateAlert) setDuplicateAlert(false);
+                      }} 
                     />
                     <button type="button" onClick={fetchTranslation} className="absolute right-3 top-3 text-[#2D4F1E]">
                       {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
@@ -556,6 +586,17 @@ const App = () => {
           <span className="text-lg font-black text-[#2D4F1E] italic">{Math.round(progress)}%</span>
         </div>
       </div>
+
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px); }
+          75% { transform: translateX(4px); }
+        }
+        .animate-shake {
+          animation: shake 0.2s ease-in-out 0s 2;
+        }
+      `}</style>
     </div>
   );
 };
