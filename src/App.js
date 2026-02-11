@@ -37,26 +37,28 @@ import {
 } from 'lucide-react';
 
 // ========================================================
-// 🛠️ Firebase 與 環境配置修正 (解決 auth/invalid-api-key)
+// 🛠️ 安全環境配置 (解決 process is not defined)
 // ========================================================
 const isCanvas = typeof __app_id !== 'undefined';
 
-// 安全地獲取系統預置配置或回退到本地環境變數
+const getEnv = (key, fallback) => {
+  try {
+    // 支援 Vite 環境
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+      return import.meta.env[key];
+    }
+    // 支援 CRA/Node 環境
+    if (typeof process !== 'undefined' && process.env && process.env[key]) {
+      return process.env[key];
+    }
+  } catch (e) {}
+  return fallback;
+};
+
 let firebaseConfig = {};
 if (isCanvas && typeof __firebase_config !== 'undefined') {
-  // 在 Canvas 環境中，優先使用系統提供的配置
   firebaseConfig = JSON.parse(__firebase_config);
 } else {
-  // 非 Canvas 環境，使用本地定義 (確保 process 不會報錯)
-  const getEnv = (key, fallback) => {
-    try {
-      if (typeof process !== 'undefined' && process.env && process.env[key]) {
-        return process.env[key];
-      }
-    } catch (e) {}
-    return fallback;
-  };
-
   firebaseConfig = {
     apiKey: getEnv('REACT_APP_FIREBASE_API_KEY', ""), 
     authDomain: getEnv('REACT_APP_FIREBASE_AUTH_DOMAIN', "vocabularyh-4c909.firebaseapp.com"),
@@ -67,8 +69,8 @@ if (isCanvas && typeof __firebase_config !== 'undefined') {
   };
 }
 
-// Gemini API Key 處理：在 Canvas 環境下保持為空，本地環境下則讀取環境變數
-const geminiApiKey = isCanvas ? "" : (process?.env?.REACT_APP_GEMINI_KEY || "");
+const geminiApiKey = isCanvas ? "" : getEnv('REACT_APP_GEMINI_KEY', "");
+const GEMINI_MODEL = "gemini-1.5-flash"; // 使用 1.5-flash 確保額度充裕
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -77,7 +79,7 @@ const googleProvider = new GoogleAuthProvider();
 const appId = isCanvas ? __app_id : 'multilang-vocab-master';
 
 // ========================================================
-// 🛡️ API 輔助函式：實作 Exponential Backoff
+// 🛡️ API 輔助函式
 // ========================================================
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   let delay = 1000;
@@ -113,13 +115,15 @@ const App = () => {
 
   const currentLangWords = words.filter(w => w.lang === langMode);
 
+  // 初始化 Auth
   useEffect(() => {
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          await signInAnonymously(auth);
+          // 這裡不自動匿名登入，讓用戶手動選，除非是在 Canvas 環境
+          if (isCanvas) await signInAnonymously(auth);
         }
       } catch (err) {
         console.error("Auth init error:", err);
@@ -134,7 +138,7 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // 資料監聽：遵循 RULE 3，確保 user 存在後才發起請求
+  // 資料監聽
   useEffect(() => {
     if (!user) return;
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
@@ -196,7 +200,7 @@ const App = () => {
     setErrorMsg(null);
     try {
       const prompt = `Translate this ${langMode === 'EN' ? 'English' : 'Japanese'} word to Traditional Chinese: "${newWord.term}". Just provide the most common one-word meaning. No extra text.`;
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
       
       const response = await fetchWithRetry(url, {
         method: 'POST',
@@ -233,7 +237,7 @@ const App = () => {
         "tips": "memory tip"
       }`;
       
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
       
       const response = await fetchWithRetry(url, {
         method: 'POST',
@@ -393,9 +397,9 @@ const App = () => {
               {user.isAnonymous ? (
                 <div className="w-7 h-7 rounded-full bg-stone-300 flex items-center justify-center text-stone-600"><UserIcon size={14} /></div>
               ) : (
-                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2D4F1E&color=fff`} className="w-7 h-7 rounded-full border border-stone-200" alt="U" />
+                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2D4F1E&color=fff`} className="w-7 h-7 rounded-full border border-stone-200" alt="Avatar" />
               )}
-              <span className="text-[10px] font-black text-stone-500 pr-1 uppercase">{user.isAnonymous ? 'Guest' : (user.displayName || 'User')}</span>
+              <span className="text-[10px] font-black text-stone-500 pr-1 uppercase truncate max-w-[60px]">{user.isAnonymous ? 'Guest' : (user.displayName || 'User')}</span>
             </div>
             <button onClick={handleSignOut} className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all rounded-full hover:bg-red-50">
               <LogOut size={18}/>
