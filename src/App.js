@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInWithCustomToken,
-  signInAnonymously,
-  onAuthStateChanged,
-  signOut
+  signInWithCustomToken, 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -13,9 +15,8 @@ import {
   doc, 
   updateDoc, 
   onSnapshot, 
-  addDoc,
-  deleteDoc,
-  query
+  addDoc, 
+  deleteDoc 
 } from 'firebase/firestore';
 import { 
   Volume2, 
@@ -27,8 +28,11 @@ import {
   Search, 
   LogOut, 
   Loader2, 
-  Medal,
-  AlertCircle
+  Medal, 
+  AlertCircle,
+  LogIn,
+  ShieldCheck,
+  User
 } from 'lucide-react';
 
 // ========================================================
@@ -37,7 +41,6 @@ import {
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-      // 支援從環境變數讀取 (適用於 Netlify / Local)
       apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
       authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "vocabularyh-4c909.firebaseapp.com",
       projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "vocabularyh-4c909",
@@ -49,6 +52,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
 
 const App = () => {
@@ -66,7 +70,6 @@ const App = () => {
   const [quizFeedback, setQuizFeedback] = useState(null); 
   
   const isTransitioning = useRef(false);
-  const nextQuizTimeout = useRef(null);
 
   const colors = {
     primary: "bg-[#2D4F1E]", 
@@ -76,21 +79,17 @@ const App = () => {
   };
 
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Auth Init Error:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+    // 監聽登入狀態
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+
+    // 如果在 Canvas 環境，自動嘗試 Token 登入
+    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+      signInWithCustomToken(auth, __initial_auth_token).catch(console.error);
+    }
+
     return () => unsubscribe();
   }, []);
 
@@ -107,11 +106,37 @@ const App = () => {
       },
       (err) => {
         console.error("Firestore error:", err);
-        setErrorMsg("資料載入失敗。");
+        setErrorMsg("資料載入失敗，請檢查權限設定。");
       }
     );
     return () => unsubscribe();
   }, [user]);
+
+  // Google 登入處理
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      setErrorMsg("Google 登入失敗：" + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 匿名登入處理
+  const handleAnonymousLogin = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await signInAnonymously(auth);
+    } catch (err) {
+      setErrorMsg("匿名登入失敗：" + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const speak = (text, lang) => {
     if (!window.speechSynthesis) return;
@@ -122,16 +147,16 @@ const App = () => {
     window.speechSynthesis.speak(utterance);
   };
 
-  // Gemini 翻譯功能
   const fetchTranslation = async () => {
     if (!newWord.term || isProcessing) return;
     setIsProcessing(true);
     setErrorMsg(null);
     
-    // 關鍵邏輯：在 Canvas 預覽環境中強制使用 "" (空字串)，在 Netlify 則讀取你的變數
-    const isCanvasEnv = typeof __initial_auth_token !== 'undefined';
-    const apiKey = isCanvasEnv ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
-    
+    const isCanvas = window.location.hostname.includes('firebasestorage.googleapis.com') || 
+                     window.location.hostname.includes('web-preview') ||
+                     typeof __initial_auth_token !== 'undefined';
+
+    const apiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
     const model = "gemini-2.5-flash-preview-09-2025";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -140,7 +165,7 @@ const App = () => {
     try {
       let response;
       let lastError;
-      // 指數退避重試機制 (最多 5 次)
+      
       for (let i = 0; i < 5; i++) {
         try {
           response = await fetch(url, {
@@ -148,11 +173,17 @@ const App = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: translatePrompt }] }] })
           });
+          
+          if (response.status === 403) {
+            throw new Error(isCanvas ? "Canvas 權限錯誤 (403)" : "API Key 無效或未授權 (403)。");
+          }
+          
           if (response.ok) break;
           const errData = await response.json();
           lastError = errData.error?.message || "API 錯誤";
         } catch (e) {
           lastError = e.message;
+          if (e.message.includes("403")) break;
         }
         await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000));
       }
@@ -231,7 +262,72 @@ const App = () => {
   const archivedCount = currentLangWords.filter(w => w.stats?.mc?.archived).length;
   const progress = totalCount > 0 ? (archivedCount / totalCount) * 100 : 0;
 
-  if (loading) return <div className="flex h-screen items-center justify-center font-bold text-[#2D4F1E]">正在初始化獵場...</div>;
+  // 渲染登入頁面
+  if (!user && !loading) {
+    return (
+      <div className={`min-h-screen ${colors.bg} flex items-center justify-center p-6 font-sans`}>
+        <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-10 text-center border-2 border-stone-100 relative overflow-hidden">
+          {/* 背景裝飾 */}
+          <div className="absolute top-0 left-0 w-full h-2 bg-[#2D4F1E]"></div>
+          
+          <div className="w-20 h-20 bg-[#2D4F1E] rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl rotate-6">
+            <Compass className="text-white w-10 h-10" />
+          </div>
+          
+          <h1 className="text-4xl font-black text-[#2D4F1E] mb-4">VocabHunter</h1>
+          <p className="text-stone-500 mb-10 font-medium px-4">準備好開始你的單字狩獵之旅了嗎？<br/>登入後進度將永遠儲存在你的皮箱中。</p>
+          
+          <div className="space-y-3">
+            <button 
+              onClick={handleGoogleLogin}
+              className="w-full py-4 bg-white border-2 border-stone-200 hover:border-[#2D4F1E] text-stone-700 rounded-2xl font-bold text-lg shadow-sm transition-all active:scale-95 flex items-center justify-center gap-3"
+            >
+              <svg className="w-6 h-6" viewBox="0 0 48 48">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.13-.45-4.69H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.51z"/>
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+              </svg>
+              使用 Google 帳號登入
+            </button>
+
+            <div className="flex items-center gap-3 my-4">
+              <div className="flex-1 h-[1px] bg-stone-100"></div>
+              <span className="text-stone-300 text-xs font-bold uppercase tracking-widest">或</span>
+              <div className="flex-1 h-[1px] bg-stone-100"></div>
+            </div>
+
+            <button 
+              onClick={handleAnonymousLogin}
+              className="w-full py-4 text-stone-400 hover:text-stone-600 font-bold transition-all flex items-center justify-center gap-2"
+            >
+              <User size={18} />
+              先以匿名身份進入
+            </button>
+          </div>
+          
+          <div className="mt-10 flex items-center justify-center gap-2 text-stone-300 text-[10px] font-black uppercase tracking-tighter">
+            <ShieldCheck size={14} />
+            <span>Encrypted & Secured by Firebase</span>
+          </div>
+          
+          {errorMsg && (
+            <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold flex items-center gap-2 justify-center">
+              <AlertCircle size={16} />
+              {errorMsg}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) return (
+    <div className="flex flex-col h-screen items-center justify-center bg-[#FDFCF8]">
+      <Loader2 className="animate-spin text-[#2D4F1E] w-12 h-12 mb-4" />
+      <div className="font-black text-[#2D4F1E] tracking-widest text-xl animate-pulse">正在檢查獵場通行證...</div>
+    </div>
+  );
 
   return (
     <div className={`min-h-screen ${colors.bg} text-stone-800 pb-32 font-sans relative`}>
@@ -243,11 +339,20 @@ const App = () => {
           <span className="text-2xl font-black text-[#2D4F1E]">VocabHunter</span>
         </div>
         <div className="flex items-center gap-4">
-          <div className="bg-stone-100 p-1 rounded-xl flex border">
+          <div className="bg-stone-100 p-1 rounded-xl flex border mr-2">
             <button onClick={() => setLangMode('EN')} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${langMode === 'EN' ? 'bg-[#2D4F1E] text-white' : 'text-stone-400'}`}>EN</button>
             <button onClick={() => setLangMode('JP')} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${langMode === 'JP' ? 'bg-orange-800 text-white' : 'text-stone-400'}`}>JP</button>
           </div>
-          <button onClick={() => signOut(auth)} className="p-2 text-stone-300 hover:text-red-700"><LogOut size={20} /></button>
+          <div className="flex items-center gap-2 border-l pl-4 border-stone-200">
+            {user?.photoURL ? (
+              <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full border border-stone-200 shadow-sm" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-stone-200 flex items-center justify-center text-stone-500">
+                <User size={16} />
+              </div>
+            )}
+            <button onClick={() => signOut(auth)} className="p-2 text-stone-300 hover:text-red-700 transition-colors"><LogOut size={20} /></button>
+          </div>
         </div>
       </header>
 
