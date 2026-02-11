@@ -234,7 +234,7 @@ const App = () => {
     const stats = quizWord.stats?.mc || { correct: 0, total: 0, archived: false };
     const newTotal = stats.total + 1;
     const newCorrect = isCorrect ? stats.correct + 1 : stats.correct;
-    const shouldArchive = newCorrect >= 5 && (newCorrect / newTotal) > 0.7;
+    const shouldArchive = newCorrect >= 4 && (newCorrect / newTotal) >= 0.7;
 
     setQuizFeedback({ 
       status: isCorrect ? 'correct' : 'wrong', 
@@ -251,7 +251,7 @@ const App = () => {
       console.error("Update error:", e);
     }
     
-    const waitTime = isCorrect ? (shouldArchive ? 2500 : 2000) : 2200; 
+    const waitTime = isCorrect ? (shouldArchive ? 2200 : 1800) : 2000; 
     
     setTimeout(() => {
         setQuizFeedback(null);
