@@ -45,15 +45,15 @@ const isCanvas = typeof __app_id !== 'undefined';
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-      apiKey: "", 
-      authDomain: "vocabularyh-4c909.firebaseapp.com",
-      projectId: "vocabularyh-4c909",
-      storageBucket: "vocabularyh-4c909.firebasestorage.app",
-      messagingSenderId: "924954723346",
-      appId: "1:924954723346:web:cc792c2fdd317fb96684cb",
+      apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "", 
+      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "vocabularyh-4c909.firebaseapp.com",
+      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "vocabularyh-4c909",
+      storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "vocabularyh-4c909.firebasestorage.app",
+      messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "924954723346",
+      appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:924954723346:web:cc792c2fdd317fb96684cb",
     };
 
-const geminiApiKey = "";
+const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
