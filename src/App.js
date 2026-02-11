@@ -30,7 +30,6 @@ import {
   Sparkles,
   X,
   Plus,
-  LogIn,
   Target,
   AlertCircle,
   User as UserIcon,
@@ -38,28 +37,61 @@ import {
 } from 'lucide-react';
 
 // ========================================================
-// 🛠️ 環境配置與變數處理
+// 🛠️ Firebase 與 環境配置修正 (解決 auth/invalid-api-key)
 // ========================================================
 const isCanvas = typeof __app_id !== 'undefined';
 
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "", 
-      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "vocabularyh-4c909.firebaseapp.com",
-      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "vocabularyh-4c909",
-      storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "vocabularyh-4c909.firebasestorage.app",
-      messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "924954723346",
-      appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:924954723346:web:cc792c2fdd317fb96684cb",
-    };
+// 安全地獲取系統預置配置或回退到本地環境變數
+let firebaseConfig = {};
+if (isCanvas && typeof __firebase_config !== 'undefined') {
+  // 在 Canvas 環境中，優先使用系統提供的配置
+  firebaseConfig = JSON.parse(__firebase_config);
+} else {
+  // 非 Canvas 環境，使用本地定義 (確保 process 不會報錯)
+  const getEnv = (key, fallback) => {
+    try {
+      if (typeof process !== 'undefined' && process.env && process.env[key]) {
+        return process.env[key];
+      }
+    } catch (e) {}
+    return fallback;
+  };
 
-const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
+  firebaseConfig = {
+    apiKey: getEnv('REACT_APP_FIREBASE_API_KEY', ""), 
+    authDomain: getEnv('REACT_APP_FIREBASE_AUTH_DOMAIN', "vocabularyh-4c909.firebaseapp.com"),
+    projectId: getEnv('REACT_APP_FIREBASE_PROJECT_ID', "vocabularyh-4c909"),
+    storageBucket: getEnv('REACT_APP_FIREBASE_STORAGE_BUCKET', "vocabularyh-4c909.firebasestorage.app"),
+    messagingSenderId: getEnv('REACT_APP_FIREBASE_MESSAGING_SENDER_ID', "924954723346"),
+    appId: getEnv('REACT_APP_FIREBASE_APP_ID', "1:924954723346:web:cc792c2fdd317fb96684cb"),
+  };
+}
+
+// Gemini API Key 處理：在 Canvas 環境下保持為空，本地環境下則讀取環境變數
+const geminiApiKey = isCanvas ? "" : (process?.env?.REACT_APP_GEMINI_KEY || "");
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 const appId = isCanvas ? __app_id : 'multilang-vocab-master';
+
+// ========================================================
+// 🛡️ API 輔助函式：實作 Exponential Backoff
+// ========================================================
+const fetchWithRetry = async (url, options, maxRetries = 5) => {
+  let delay = 1000;
+  for (let i = 0; i < maxRetries; i++) {
+    const response = await fetch(url, options);
+    if (response.status === 429) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+      continue;
+    }
+    return response;
+  }
+  return fetch(url, options);
+};
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -81,12 +113,13 @@ const App = () => {
 
   const currentLangWords = words.filter(w => w.lang === langMode);
 
-  // 初始化驗證
   useEffect(() => {
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
         }
       } catch (err) {
         console.error("Auth init error:", err);
@@ -100,6 +133,20 @@ const App = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  // 資料監聽：遵循 RULE 3，確保 user 存在後才發起請求
+  useEffect(() => {
+    if (!user) return;
+    const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
+    const unsubscribe = onSnapshot(wordsRef, 
+      (snapshot) => {
+        const wordList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setWords(wordList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
+      },
+      (err) => setErrorMsg("資料庫連線異常")
+    );
+    return () => unsubscribe();
+  }, [user]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -126,7 +173,6 @@ const App = () => {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      // 清空狀態
       setUser(null);
       setWords([]);
       setSelectedWord(null);
@@ -134,20 +180,6 @@ const App = () => {
       setErrorMsg("登出失敗");
     }
   };
-
-  // 監聽單字庫
-  useEffect(() => {
-    if (!user) return;
-    const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
-    const unsubscribe = onSnapshot(wordsRef, 
-      (snapshot) => {
-        const wordList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setWords(wordList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
-      },
-      (err) => setErrorMsg("連線異常")
-    );
-    return () => unsubscribe();
-  }, [user]);
 
   const speak = (text, lang) => {
     if (!window.speechSynthesis) return;
@@ -165,16 +197,20 @@ const App = () => {
     try {
       const prompt = `Translate this ${langMode === 'EN' ? 'English' : 'Japanese'} word to Traditional Chinese: "${newWord.term}". Just provide the most common one-word meaning. No extra text.`;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${geminiApiKey}`;
-      const response = await fetch(url, {
+      
+      const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       });
+
+      if (!response.ok) throw new Error("翻譯助手目前無法回應");
+
       const data = await response.json();
       const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
       setNewWord(prev => ({ ...prev, definition: result?.trim() || "" }));
     } catch (err) {
-      setErrorMsg("翻譯助手故障中");
+      setErrorMsg(err.message);
     } finally {
       setIsProcessing(false);
     }
@@ -185,6 +221,7 @@ const App = () => {
     setSelectedWord(word);
     setExplanation(null);
     setIsExplaining(true);
+    setErrorMsg(null);
     try {
       const prompt = `Analyze: "${word.term}" (${word.lang}). Respond in Traditional Chinese JSON:
       {
@@ -197,7 +234,8 @@ const App = () => {
       }`;
       
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${geminiApiKey}`;
-      const response = await fetch(url, {
+      
+      const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -205,11 +243,14 @@ const App = () => {
           generationConfig: { responseMimeType: "application/json" }
         })
       });
+
+      if (!response.ok) throw new Error("解析失敗");
+
       const data = await response.json();
       const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
       setExplanation(parsed);
     } catch (err) {
-      setErrorMsg("詳解生成失敗");
+      setErrorMsg(err.message);
     } finally {
       setIsExplaining(false);
     }
@@ -238,8 +279,9 @@ const App = () => {
         stats: { mc: { correct: 0, total: 0, archived: false } }
       });
       setNewWord({ term: '', definition: '' });
-      setDuplicateAlert(false);
-    } catch (err) {}
+    } catch (err) {
+      setErrorMsg("新增單字失敗");
+    }
   };
 
   const handleQuizAnswer = async (answer) => {
@@ -263,15 +305,11 @@ const App = () => {
       await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', quizWord.id), { 
         stats: { mc: { total: newTotal, correct: newCorrect, archived: shouldArchive } } 
       });
-    } catch (e) {
-      console.error("Update error:", e);
-    }
+    } catch (e) {}
     
     setTimeout(() => {
         setQuizFeedback(null);
-        if (activeTab === 'quiz') {
-          generateQuiz();
-        }
+        if (activeTab === 'quiz') generateQuiz();
     }, 1500);
   };
 
@@ -297,9 +335,7 @@ const App = () => {
   };
 
   useEffect(() => { 
-    if (activeTab === 'quiz' && !quizFeedback) {
-      generateQuiz(); 
-    }
+    if (activeTab === 'quiz' && !quizFeedback) generateQuiz(); 
   }, [activeTab, langMode, words]);
 
   const archivedCount = currentLangWords.filter(w => w.stats?.mc?.archived).length;
@@ -324,21 +360,14 @@ const App = () => {
         <p className="text-stone-400 text-sm font-medium mb-8">同步你的單字獵場，跨裝置狩獵</p>
         
         <div className="space-y-3">
-          <button 
-            onClick={handleGoogleLogin}
-            className="w-full py-4 bg-white border border-stone-200 text-stone-700 rounded-2xl font-black flex items-center justify-center gap-3 shadow-sm active:scale-95 transition-all"
-          >
+          <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border border-stone-200 text-stone-700 rounded-2xl font-black flex items-center justify-center gap-3 shadow-sm active:scale-95 transition-all">
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
             使用 Google 登入
           </button>
-          <button 
-            onClick={handleAnonymousLogin}
-            className="w-full py-4 bg-stone-50 text-stone-500 rounded-2xl font-bold text-sm active:scale-95 transition-all"
-          >
+          <button onClick={handleAnonymousLogin} className="w-full py-4 bg-stone-50 text-stone-500 rounded-2xl font-bold text-sm active:scale-95 transition-all">
             直接進入 (訪客模式)
           </button>
         </div>
-        {errorMsg && <p className="mt-4 text-red-500 text-xs font-bold">{errorMsg}</p>}
       </div>
     </div>
   );
@@ -360,49 +389,27 @@ const App = () => {
           </div>
           
           <div className="flex items-center gap-2 pl-2 border-l border-stone-100">
-            {user.isAnonymous ? (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-stone-100 px-2 py-1 rounded-full border border-stone-200">
-                  <div className="w-7 h-7 rounded-full bg-stone-300 flex items-center justify-center text-stone-600">
-                    <UserIcon size={14} />
-                  </div>
-                  <span className="text-[10px] font-black text-stone-500 pr-1">GUEST</span>
-                </div>
-                <button 
-                  onClick={handleSignOut} 
-                  className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all rounded-full hover:bg-red-50"
-                  title="登出訪客模式"
-                >
-                  <LogOut size={18}/>
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <div className="relative group">
-                  <img 
-                    src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2D4F1E&color=fff`} 
-                    alt="User" 
-                    className="w-8 h-8 rounded-full border border-stone-200 object-cover" 
-                  />
-                </div>
-                <button 
-                  onClick={handleSignOut} 
-                  className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all rounded-full hover:bg-red-50"
-                  title="登出帳號"
-                >
-                  <LogOut size={18}/>
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 bg-stone-100 px-2 py-1 rounded-full border border-stone-200">
+              {user.isAnonymous ? (
+                <div className="w-7 h-7 rounded-full bg-stone-300 flex items-center justify-center text-stone-600"><UserIcon size={14} /></div>
+              ) : (
+                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2D4F1E&color=fff`} className="w-7 h-7 rounded-full border border-stone-200" alt="U" />
+              )}
+              <span className="text-[10px] font-black text-stone-500 pr-1 uppercase">{user.isAnonymous ? 'Guest' : (user.displayName || 'User')}</span>
+            </div>
+            <button onClick={handleSignOut} className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all rounded-full hover:bg-red-50">
+              <LogOut size={18}/>
+            </button>
           </div>
         </div>
       </header>
 
-      {duplicateAlert && (
+      {errorMsg && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top-4 fade-in duration-300">
-          <div className="bg-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-red-400">
-            <AlertCircle size={20} />
-            <span className="font-black text-sm">此單字已在獵場中！</span>
+          <div className="bg-stone-800 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-stone-700">
+            <AlertCircle size={20} className="text-orange-400" />
+            <span className="font-black text-sm">{errorMsg}</span>
+            <button onClick={() => setErrorMsg(null)} className="ml-2 text-stone-400"><X size={14}/></button>
           </div>
         </div>
       )}
@@ -471,51 +478,32 @@ const App = () => {
                   </div>
                 </div>
               ))}
-              {currentLangWords.length === 0 && <div className="text-center py-10 text-stone-300 text-sm font-bold">獵場目前是空的...</div>}
             </div>
           </div>
         ) : (
           <div className="max-w-md mx-auto py-4">
-            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-stone-100 text-center min-h-[440px] flex flex-col justify-center relative overflow-hidden">
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-stone-100 text-center min-h-[440px] flex flex-col justify-center relative">
               {quizFeedback && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 bg-white/95 backdrop-blur-md animate-in fade-in zoom-in duration-300">
                   <div className={`p-6 rounded-full mb-6 ${quizFeedback.status === 'correct' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-700'}`}>
                     {quizFeedback.status === 'correct' ? <Target size={80} className="animate-bounce" /> : <XCircle size={80} />}
                   </div>
-                  <h2 className={`text-3xl font-black mb-3 ${quizFeedback.status === 'correct' ? 'text-green-600' : 'text-red-700'}`}>
-                    {quizFeedback.status === 'correct' ? 'Bingo!' : 'Oops!'}
-                  </h2>
-                  <p className={`text-base font-black px-6 py-3 rounded-2xl shadow-sm ${quizFeedback.status === 'correct' ? 'bg-green-500 text-white' : 'bg-stone-100 text-stone-600'}`}>
-                    {quizFeedback.message}
-                  </p>
+                  <h2 className={`text-3xl font-black mb-3 ${quizFeedback.status === 'correct' ? 'text-green-600' : 'text-red-700'}`}>{quizFeedback.status === 'correct' ? 'Bingo!' : 'Oops!'}</h2>
+                  <p className={`text-base font-black px-6 py-3 rounded-2xl shadow-sm ${quizFeedback.status === 'correct' ? 'bg-green-500 text-white' : 'bg-stone-100 text-stone-600'}`}>{quizFeedback.message}</p>
                 </div>
               )}
-
               {!quizWord ? (
                 <div className="text-stone-300 font-black">獵物不足，請先去單字庫捕捉獵物！</div>
               ) : (
                 <>
                   <div className="flex justify-between items-start mb-6">
-                    <span className="bg-stone-100 px-3 py-1 rounded-full text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                      Session Quiz
-                    </span>
-                    <button onClick={() => speak(quizWord.term, quizWord.lang)} className="p-3 bg-stone-50 rounded-full border border-stone-100 active:scale-90 transition-transform">
-                      <Volume2 size={24} className="text-[#2D4F1E]"/>
-                    </button>
+                    <span className="bg-stone-100 px-3 py-1 rounded-full text-[10px] font-black text-stone-400 uppercase tracking-widest">Quiz Session</span>
+                    <button onClick={() => speak(quizWord.term, quizWord.lang)} className="p-3 bg-stone-50 rounded-full border border-stone-100"><Volume2 size={24} className="text-[#2D4F1E]"/></button>
                   </div>
-
-                  <h2 className="text-4xl font-black mb-10 text-stone-800 tracking-tight leading-tight">
-                    {quizWord.term}
-                  </h2>
-
+                  <h2 className="text-4xl font-black mb-10 text-stone-800">{quizWord.term}</h2>
                   <div className="grid gap-3">
                     {options.map((opt, i) => (
-                      <button 
-                        key={i} 
-                        onClick={() => handleQuizAnswer(opt)} 
-                        disabled={!!quizFeedback}
-                        className="py-4 px-6 bg-stone-50 border-2 border-stone-100 rounded-2xl font-bold text-sm text-stone-700 active:bg-[#2D4F1E] active:text-white active:border-[#2D4F1E] transition-all disabled:opacity-50"
-                      >
+                      <button key={i} onClick={() => handleQuizAnswer(opt)} disabled={!!quizFeedback} className="py-4 px-6 bg-stone-50 border-2 border-stone-100 rounded-2xl font-bold text-sm text-stone-700 active:bg-[#2D4F1E] active:text-white transition-all">
                         {opt}
                       </button>
                     ))}
@@ -528,55 +516,34 @@ const App = () => {
       </main>
 
       {selectedWord && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center animate-in fade-in duration-200">
           <div className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
-          <div className="relative w-full max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-4 duration-300">
-            <div className="bg-[#2D4F1E] p-6 text-white shrink-0">
-              <div className="flex justify-between items-start">
+          <div className="relative w-full max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full duration-300">
+            <div className="bg-[#2D4F1E] p-6 text-white">
+              <div className="flex justify-between">
                 <div>
-                  <div className="flex items-end gap-2 mb-1">
-                    <h2 className="text-3xl font-black">{selectedWord.term}</h2>
-                    <span className="text-white/50 text-xs font-bold mb-1">{explanation?.phonetic}</span>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <span className="bg-white/20 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest">{explanation?.pos || '...'}</span>
-                    <span className="text-white/80 text-sm font-bold">{selectedWord.definition}</span>
-                  </div>
+                  <h2 className="text-3xl font-black">{selectedWord.term}</h2>
+                  <p className="text-white/80 font-bold">{selectedWord.definition}</p>
                 </div>
-                <button onClick={() => setSelectedWord(null)} className="p-2 bg-white/10 rounded-full active:scale-90"><X size={20}/></button>
+                <button onClick={() => setSelectedWord(null)} className="p-2 bg-white/10 rounded-full"><X size={20}/></button>
               </div>
             </div>
-
-            <div className="p-6 space-y-6 overflow-y-auto">
+            <div className="p-6 space-y-6">
               {isExplaining ? (
-                <div className="space-y-4 animate-pulse">
-                  <div className="h-20 bg-stone-100 rounded-xl"></div>
-                  <div className="h-10 bg-stone-100 rounded-xl w-2/3"></div>
-                </div>
+                <div className="flex items-center gap-3 text-stone-400 font-bold animate-pulse"><Loader2 size={18} className="animate-spin" /> AI 解析中...</div>
               ) : explanation ? (
                 <>
                   <section>
-                    <h4 className="text-[10px] font-black text-stone-300 uppercase tracking-widest mb-2 flex items-center gap-2"><BookOpen size={12}/> 實戰例句</h4>
+                    <h4 className="text-[10px] font-black text-stone-300 uppercase mb-2">實戰例句</h4>
                     <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
-                      <p className="text-md font-bold text-[#2D4F1E] mb-1 italic">"{explanation.example_original}"</p>
-                      <p className="text-stone-400 text-xs font-medium">{explanation.example_zh}</p>
+                      <p className="font-bold text-[#2D4F1E] mb-1 italic">"{explanation.example_original}"</p>
+                      <p className="text-stone-400 text-xs">{explanation.example_zh}</p>
                     </div>
                   </section>
-
-                  <div className="grid grid-cols-1 gap-6">
-                    <section>
-                      <h4 className="text-[10px] font-black text-stone-300 uppercase tracking-widest mb-2">近義詞對照</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {explanation.synonyms?.map(s => (
-                          <span key={s} className="px-3 py-1.5 bg-white border border-stone-100 rounded-lg text-xs font-bold text-stone-600 shadow-sm">{s}</span>
-                        ))}
-                      </div>
-                    </section>
-                    <section>
-                      <h4 className="text-[10px] font-black text-stone-300 uppercase tracking-widest mb-2">記憶點</h4>
-                      <p className="text-xs font-bold text-orange-900 leading-relaxed bg-orange-50 p-3 rounded-lg border border-orange-100">{explanation.tips}</p>
-                    </section>
-                  </div>
+                  <section>
+                    <h4 className="text-[10px] font-black text-stone-300 uppercase mb-2">記憶點</h4>
+                    <p className="text-xs font-bold text-orange-900 leading-relaxed bg-orange-50 p-3 rounded-lg border border-orange-100">{explanation.tips}</p>
+                  </section>
                 </>
               ) : null}
             </div>
@@ -591,9 +558,9 @@ const App = () => {
             <span className="text-sm font-black text-[#2D4F1E]">{archivedCount}/{currentLangWords.length}</span>
           </div>
           <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[#2D4F1E] rounded-full transition-all duration-1000" style={{ width: `${progress}%` }}></div>
+            <div className="h-full bg-[#2D4F1E] transition-all duration-1000" style={{ width: `${progress}%` }}></div>
           </div>
-          <span className="text-lg font-black text-[#2D4F1E] italic">{Math.round(progress)}%</span>
+          <span className="text-lg font-black text-[#2D4F1E]">{Math.round(progress)}%</span>
         </div>
       </div>
 
@@ -603,9 +570,7 @@ const App = () => {
           25% { transform: translateX(-4px); }
           75% { transform: translateX(4px); }
         }
-        .animate-shake {
-          animation: shake 0.2s ease-in-out 0s 2;
-        }
+        .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
       `}</style>
     </div>
   );
