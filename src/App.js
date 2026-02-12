@@ -62,7 +62,7 @@ const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = isCanvas ? __app_id : 'mobile-vocab-hunter';
+const appId = isCanvas ? __app_id : 'multilang-vocab-master';
 
 // ========================================================
 // 🧠 輔助函式
