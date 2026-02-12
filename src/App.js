@@ -39,8 +39,7 @@ import {
   AlertCircle,
   UserCircle,
   Award,
-  Flame,
-  ChevronRight
+  Flame
 } from 'lucide-react';
 
 // ========================================================
@@ -49,11 +48,12 @@ import {
 const isCanvas = typeof __app_id !== 'undefined';
 const analysisCache = new Map();
 
-// 確保 Firebase 配置包含備援邏輯
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY, 
+      // 這是當環境變數不存在時的備援。
+      // 請確保在正式環境中使用 __firebase_config 注入。
+      apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
       authDomain: "vocabularyh-4c909.firebaseapp.com",
       projectId: "vocabularyh-4c909",
       storageBucket: "vocabularyh-4c909.firebasestorage.app",
@@ -62,14 +62,13 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
       measurementId: "G-C7KZ6SPTVC"
     };
 
-// 確保 Gemini API Key 配置包含備援邏輯
 const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
 const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = 'multilang-vocab-master'; // 固定使用您指定的 App ID
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
 
 // ========================================================
 // 🧠 輔助函式
@@ -131,15 +130,15 @@ const App = () => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const result = await getRedirectResult(auth);
-        if (result?.user) {
-          setUser(result.user);
-          setAuthLoading(false);
-          return;
-        }
-
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          const result = await getRedirectResult(auth);
+          if (result?.user) {
+            setUser(result.user);
+          } else if (!auth.currentUser) {
+            await signInAnonymously(auth);
+          }
         }
       } catch (err) {
         console.error("Auth Init Error", err);
@@ -173,19 +172,8 @@ const App = () => {
     }
   };
 
-  const handleAnonymousLogin = async () => {
-    try { 
-      setAuthLoading(true);
-      await signInAnonymously(auth); 
-    } catch (err) { 
-      console.error(err); 
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   // ========================================================
-  // 📊 資料同步
+  // 📊 資料同步 (符合 RULE 1 & 2)
   // ========================================================
   useEffect(() => {
     if (!user) return;
@@ -193,6 +181,7 @@ const App = () => {
     const unsubscribe = onSnapshot(query(wordsRef), 
       (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // 在記憶體中排序以符合 RULE 2
         setWords(data.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
       }, 
       (error) => console.warn("Firestore Error:", error.message)
@@ -258,7 +247,7 @@ const App = () => {
   };
 
   // ========================================================
-  // 🤖 AI 分析 (更新後的 JSON 結構)
+  // 🤖 AI 分析
   // ========================================================
   const fetchExplanation = async (word) => {
     if (isExplaining) return;
@@ -281,7 +270,7 @@ const App = () => {
         "tips": "記憶技巧"
       }`;
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
       const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -361,7 +350,7 @@ const App = () => {
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
               使用 Google 登入
             </button>
-            <button onClick={handleAnonymousLogin} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 hover:shadow-lg transition-all active:scale-95">
+            <button onClick={() => signInAnonymously(auth)} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 hover:shadow-lg transition-all active:scale-95">
               <UserCircle size={20} /> 匿名獵人試玩
             </button>
           </div>
@@ -372,7 +361,6 @@ const App = () => {
 
   return (
     <div className="min-h-[100dvh] bg-[#FDFCF8] text-stone-800 pb-36 font-sans select-none overflow-x-hidden">
-      {/* Header */}
       <header className="bg-white/80 backdrop-blur-2xl border-b border-stone-100 sticky top-0 z-40 px-6 h-20 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2.5">
           <div className="bg-[#2D4F1E] p-2 rounded-xl">
@@ -396,7 +384,6 @@ const App = () => {
 
           <div className="h-10 w-px bg-stone-100 mx-1"></div>
 
-          {/* 使用者頭像與登出 */}
           <div className="flex items-center gap-2">
             <div className="flex flex-col items-end hidden md:flex">
               <span className="text-[10px] font-black text-stone-400 uppercase tracking-tighter">Hunter</span>
@@ -553,7 +540,6 @@ const App = () => {
         )}
       </main>
 
-      {/* AI 分析 Modal */}
       {selectedWord && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
@@ -599,7 +585,7 @@ const App = () => {
                       <span className="flex items-center gap-2"><PlayCircle size={14}/> 實戰例句</span>
                     </div>
                     <div className="bg-stone-50 p-6 rounded-[2rem] border-l-[6px] border-[#2D4F1E] shadow-sm">
-                      <p className="font-black text-stone-800 mb-3 leading-relaxed text-xl italic group">
+                      <p className="font-black text-stone-800 mb-3 leading-relaxed text-xl italic">
                         "{explanation.example_original}"
                       </p>
                       <p className="text-stone-500 font-bold text-base">{explanation.example_zh}</p>
@@ -637,7 +623,6 @@ const App = () => {
         </div>
       )}
 
-      {/* Progress Bar */}
       <div className="fixed bottom-6 left-6 right-6 z-40">
         <div className="max-w-md mx-auto bg-white/70 backdrop-blur-2xl border border-stone-100 p-5 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] flex items-center gap-5">
           <div className="bg-[#2D4F1E]/5 p-3 rounded-2xl">
