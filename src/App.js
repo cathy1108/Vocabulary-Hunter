@@ -48,19 +48,47 @@ import {
 const isCanvas = typeof __app_id !== 'undefined';
 const analysisCache = new Map();
 
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      // 這是當環境變數不存在時的備援。
-      // 請確保在正式環境中使用 __firebase_config 注入。
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-      authDomain: "vocabularyh-4c909.firebaseapp.com",
-      projectId: "vocabularyh-4c909",
-      storageBucket: "vocabularyh-4c909.firebasestorage.app",
-      messagingSenderId: "924954723346",
-      appId: "1:924954723346:web:cc792c2fdd317fb96684cb",
-      measurementId: "G-C7KZ6SPTVC"
-    };
+
+// ========================================================
+// 🛠️ Firebase 配置修復 (針對 404 init.json 錯誤)
+// ========================================================
+const getFirebaseConfig = () => {
+  // 優先嘗試從系統注入的變數獲取
+  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    try {
+      return JSON.parse(__firebase_config);
+    } catch (e) {
+      console.error("Firebase config parse error:", e);
+    }
+  }
+  
+  // 備援配置：確保這裡的資訊是正確的
+  // 注意：apiKey 在 Canvas 環境中運行時，系統會自動處理，但在初始化時物件必須完整
+  return {
+    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+    authDomain: "vocabularyh-4c909.firebaseapp.com",
+    projectId: "vocabularyh-4c909",
+    storageBucket: "vocabularyh-4c909.firebasestorage.app",
+    messagingSenderId: "924954723346",
+    appId: "1:924954723346:web:cc792c2fdd317fb96684cb",
+    measurementId: "G-C7KZ6SPTVC"
+  };
+};
+
+const firebaseConfig = getFirebaseConfig();
+// const firebaseConfig = typeof __firebase_config !== 'undefined' 
+//   ? JSON.parse(__firebase_config) 
+//   : {
+//       // 這是當環境變數不存在時的備援。
+//       // 請確保在正式環境中使用 __firebase_config 注入。
+//       apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+//       authDomain: "vocabularyh-4c909.firebaseapp.com",
+//       projectId: "vocabularyh-4c909",
+//       storageBucket: "vocabularyh-4c909.firebasestorage.app",
+//       messagingSenderId: "924954723346",
+//       appId: "1:924954723346:web:cc792c2fdd317fb96684cb",
+//       measurementId: "G-C7KZ6SPTVC"
+//     };
 
 const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
 const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
