@@ -41,7 +41,6 @@ import {
 // 🛡️ 環境變數相容性工具 (支援 Vite, CRA, 與 Canvas)
 // ========================================================
 const getEnv = (key, fallback = "") => {
-  // 1. 優先嘗試 Vite 的 import.meta.env
   try {
     if (typeof import.meta !== 'undefined' && import.meta.env) {
       const viteKey = key.startsWith('REACT_APP_') ? key.replace('REACT_APP_', 'VITE_') : key;
@@ -50,7 +49,6 @@ const getEnv = (key, fallback = "") => {
     }
   } catch (e) {}
 
-  // 2. 嘗試傳統的 process.env (CRA)
   try {
     if (typeof process !== 'undefined' && process.env && process.env[key]) {
       return process.env[key];
@@ -70,7 +68,6 @@ let firebaseConfig = {};
 if (isCanvas && typeof __firebase_config !== 'undefined') {
   firebaseConfig = JSON.parse(__firebase_config);
 } else {
-  // 在真實網站環境，請確保 Netlify 有設定這些環境變數
   firebaseConfig = {
     apiKey: getEnv('REACT_APP_FIREBASE_API_KEY'),
     authDomain: getEnv('REACT_APP_FIREBASE_AUTH_DOMAIN', "vocabularyh-4c909.firebaseapp.com"),
@@ -81,13 +78,8 @@ if (isCanvas && typeof __firebase_config !== 'undefined') {
   };
 }
 
-// 檢查是否漏掉 API Key (這是你報錯的主因)
-if (!firebaseConfig.apiKey && !isCanvas) {
-  console.error("Firebase API Key is missing! 檢查環境變數設定。");
-}
-
 const geminiApiKey = isCanvas ? "" : getEnv('REACT_APP_GEMINI_KEY', "");
-const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025"; // 使用最新的模型
+const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -96,10 +88,22 @@ const googleProvider = new GoogleAuthProvider();
 const appId = isCanvas ? __app_id : 'multilang-vocab-master';
 
 // ========================================================
-// 🛡️ API 輔助函式 (Gemini 2.5 Flash)
+// 🧠 全域暫存快取 (Cache)
+// ========================================================
+const apiCache = new Map();
+
+// ========================================================
+// 🛡️ API 輔助函式 (Gemini 2.5 Flash) - 已加入 Cache 邏輯
 // ========================================================
 const fetchGemini = async (prompt, isJson = false) => {
-  // Canvas 環境使用特定的 Proxy URL，外部環境使用標準 API URL
+  // 生成唯一的 Cache Key (包含 prompt 與是否為 JSON 格式)
+  const cacheKey = `${isJson ? 'json:' : 'text:'}${prompt}`;
+  
+  if (apiCache.has(cacheKey)) {
+    console.log("Reading from cache...");
+    return apiCache.get(cacheKey);
+  }
+
   const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
   const url = isCanvas ? baseUrl : `${baseUrl}?key=${geminiApiKey}`;
   
@@ -134,7 +138,11 @@ const fetchGemini = async (prompt, isJson = false) => {
       }
 
       const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      // 成功後存入 Cache
+      apiCache.set(cacheKey, result);
+      return result;
     } catch (e) {
       if (i === 4) throw e;
       await new Promise(r => setTimeout(r, delay));
@@ -170,8 +178,6 @@ const App = () => {
         if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          // 在外部環境，如果 Firebase 配置正確，這裡不會報錯
-          // 如果沒有 Token 則嘗試匿名登入
           if (!auth.currentUser) {
             await signInAnonymously(auth);
           }
@@ -207,7 +213,6 @@ const App = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // 其他邏輯保持不變...
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
@@ -236,6 +241,7 @@ const App = () => {
       setUser(null);
       setWords([]);
       setSelectedWord(null);
+      apiCache.clear(); // 登出時清空快取
     } catch (err) {
       setErrorMsg("登出失敗");
     }
