@@ -16,7 +16,8 @@ import {
   updateDoc, 
   onSnapshot, 
   addDoc, 
-  deleteDoc 
+  deleteDoc,
+  query
 } from 'firebase/firestore';
 import { 
   Volume2, 
@@ -32,90 +33,53 @@ import {
   Plus,
   Target,
   AlertCircle,
-  User as UserIcon,
   XCircle,
   Layers
 } from 'lucide-react';
 
 // ========================================================
-// 🛡️ 環境變數相容性工具 (支援 Vite, CRA, 與 Canvas)
+// 🛠️ Firebase 配置與環境判定
 // ========================================================
-const getEnv = (key, fallback = "") => {
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      const viteKey = key.startsWith('REACT_APP_') ? key.replace('REACT_APP_', 'VITE_') : key;
-      if (import.meta.env[viteKey]) return import.meta.env[viteKey];
-      if (import.meta.env[key]) return import.meta.env[key];
-    }
-  } catch (e) {}
+const isCanvas = typeof __firebase_config !== 'undefined';
 
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env[key]) {
-      return process.env[key];
-    }
-  } catch (e) {}
-
-  return fallback;
-};
-
-const isCanvas = typeof __app_id !== 'undefined';
-
-// ========================================================
-// 🔥 Firebase 配置初始化
-// ========================================================
-let firebaseConfig = {};
-
-if (isCanvas && typeof __firebase_config !== 'undefined') {
-  firebaseConfig = JSON.parse(__firebase_config);
-} else {
-  firebaseConfig = {
-    apiKey: getEnv('REACT_APP_FIREBASE_API_KEY'),
-    authDomain: getEnv('REACT_APP_FIREBASE_AUTH_DOMAIN', "vocabularyh-4c909.firebaseapp.com"),
-    projectId: getEnv('REACT_APP_FIREBASE_PROJECT_ID', "vocabularyh-4c909"),
-    storageBucket: getEnv('REACT_APP_FIREBASE_STORAGE_BUCKET', "vocabularyh-4c909.firebasestorage.app"),
-    messagingSenderId: getEnv('REACT_APP_FIREBASE_MESSAGING_SENDER_ID', "924954723346"),
-    appId: getEnv('REACT_APP_FIREBASE_APP_ID', "1:924954723346:web:cc792c2fdd317fb96684cb"),
-    measurementId: "G-C7KZ6SPTVC"
-  };
-}
-
-const geminiApiKey = isCanvas ? "" : getEnv('REACT_APP_GEMINI_KEY', "");
-const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+const firebaseConfig = isCanvas
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+      authDomain: "vocabularyh-4c909.firebaseapp.com",
+      projectId: "vocabularyh-4c909",
+      storageBucket: "vocabularyh-4c909.firebasestorage.app",
+      messagingSenderId: "924954723346",
+      appId: "1:924954723346:web:cc792c2fdd317fb96684cb",
+      measurementId: "G-C7KZ6SPTVC"
+    };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
-const appId = isCanvas ? __app_id : 'multilang-vocab-master';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
 
-// ========================================================
-// 🧠 全域暫存快取 (Cache)
-// ========================================================
+const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 const apiCache = new Map();
 
 // ========================================================
-// 🛡️ API 輔助函式 (Gemini 2.5 Flash) - 已加入 Cache 邏輯
+// 🛡️ API 輔助函式 (保留環境變數讀取邏輯)
 // ========================================================
 const fetchGemini = async (prompt, isJson = false) => {
-  // 生成唯一的 Cache Key (包含 prompt 與是否為 JSON 格式)
   const cacheKey = `${isJson ? 'json:' : 'text:'}${prompt}`;
-  
-  if (apiCache.has(cacheKey)) {
-    console.log("Reading from cache...");
-    return apiCache.get(cacheKey);
-  }
+  if (apiCache.has(cacheKey)) return apiCache.get(cacheKey);
 
-  const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-  const url = isCanvas ? baseUrl : `${baseUrl}?key=${geminiApiKey}`;
+  // 根據環境選擇 API Key 讀取方式
+  const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
   
   const payload = {
     contents: [{ parts: [{ text: prompt }] }]
   };
 
   if (isJson) {
-    payload.generationConfig = { 
-      responseMimeType: "application/json" 
-    };
+    payload.generationConfig = { responseMimeType: "application/json" };
   }
 
   let delay = 1000;
@@ -133,15 +97,16 @@ const fetchGemini = async (prompt, isJson = false) => {
         continue;
       }
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error?.message || `請求失敗 (${response.status})`);
+      const data = await response.json();
+      
+      // 處理 API 回傳的錯誤
+      if (data.error) {
+        throw new Error(data.error.message);
       }
 
-      const data = await response.json();
       const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      // 成功後存入 Cache
+      if (!result) throw new Error("無效的 API 回應");
+
       apiCache.set(cacheKey, result);
       return result;
     } catch (e) {
@@ -172,20 +137,18 @@ const App = () => {
 
   const currentLangWords = words.filter(w => w.lang === langMode);
 
-  // 初始化 Auth
+  // (1) 初始化 Auth (Rule 3)
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          if (!auth.currentUser) {
-            await signInAnonymously(auth);
-          }
+        } else if (!auth.currentUser) {
+          await signInAnonymously(auth);
         }
       } catch (err) {
-        console.error("Auth Initialization Error:", err);
-        setErrorMsg("身份驗證初始化失敗，請檢查 API Key 設定。");
+        console.error("Auth Error:", err);
+        setErrorMsg("身份驗證失敗");
       }
     };
     initAuth();
@@ -197,9 +160,10 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // 監聽資料庫
+  // (2) 監聽資料庫 (Rule 1: Strict Paths)
   useEffect(() => {
     if (!user) return;
+    
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
     const unsubscribe = onSnapshot(wordsRef, 
       (snapshot) => {
@@ -208,31 +172,17 @@ const App = () => {
       },
       (err) => {
         console.error("Firestore Error:", err);
-        setErrorMsg("資料庫讀取失敗：權限不足或配置錯誤");
+        setErrorMsg("讀取單字庫失敗");
       }
     );
     return () => unsubscribe();
   }, [user]);
 
   const handleGoogleLogin = async () => {
-    setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
       setErrorMsg("Google 登入失敗");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAnonymousLogin = async () => {
-    setLoading(true);
-    try {
-      await signInAnonymously(auth);
-    } catch (err) {
-      setErrorMsg("匿名登入失敗");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -241,8 +191,7 @@ const App = () => {
       await signOut(auth);
       setUser(null);
       setWords([]);
-      setSelectedWord(null);
-      apiCache.clear(); // 登出時清空快取
+      apiCache.clear();
     } catch (err) {
       setErrorMsg("登出失敗");
     }
@@ -266,7 +215,7 @@ const App = () => {
       const result = await fetchGemini(prompt);
       setNewWord(prev => ({ ...prev, definition: result?.trim() || "" }));
     } catch (err) {
-      setErrorMsg(`翻譯失敗: ${err.message}`);
+      setErrorMsg("翻譯失敗，請檢查 API 設定");
     } finally {
       setIsProcessing(false);
     }
@@ -277,7 +226,6 @@ const App = () => {
     setSelectedWord(word);
     setExplanation(null);
     setIsExplaining(true);
-    setErrorMsg(null);
     try {
       const prompt = `Analyze: "${word.term}" (${word.lang}). Respond in Traditional Chinese JSON:
       {
@@ -289,10 +237,9 @@ const App = () => {
         "tips": "memory tip"
       }`;
       const result = await fetchGemini(prompt, true);
-      const parsed = JSON.parse(result);
-      setExplanation(parsed);
+      setExplanation(JSON.parse(result));
     } catch (err) {
-      setErrorMsg(`解析失敗: ${err.message}`);
+      setErrorMsg("AI 解析失敗");
     } finally {
       setIsExplaining(false);
     }
@@ -302,13 +249,9 @@ const App = () => {
     e.preventDefault();
     if (!newWord.term || !newWord.definition || !user) return;
 
-    const isDuplicate = currentLangWords.some(
-      w => w.term.toLowerCase().trim() === newWord.term.toLowerCase().trim()
-    );
-
-    if (isDuplicate) {
+    if (currentLangWords.some(w => w.term.toLowerCase() === newWord.term.toLowerCase())) {
       setDuplicateAlert(true);
-      setTimeout(() => setDuplicateAlert(false), 3000);
+      setTimeout(() => setDuplicateAlert(false), 2000);
       return;
     }
 
@@ -340,12 +283,12 @@ const App = () => {
       status: isCorrect ? 'correct' : 'wrong', 
       isArchived: shouldArchive,
       term: quizWord.term,
-      message: isCorrect ? (shouldArchive ? '🎯 完美擊殺！獵物已收錄' : '✨ 命中！繼續保持') : `❌ 遺漏了！正確是：${quizWord.definition}` 
+      message: isCorrect ? (shouldArchive ? '🎯 完美擊殺！已收錄' : '✨ 命中！') : `❌ 遺漏了！正確是：${quizWord.definition}` 
     });
 
     try {
       await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', quizWord.id), { 
-        stats: { mc: { total: newTotal, correct: newCorrect, archived: shouldArchive } } 
+        "stats.mc": { total: newTotal, correct: newCorrect, archived: shouldArchive } 
       });
     } catch (e) {}
     
@@ -355,17 +298,15 @@ const App = () => {
     }, 1500);
   };
 
-  const generateQuiz = (currentWords = words) => {
-    const allCurrentLang = currentWords.filter(w => w.lang === langMode);
-    const eligibleWords = allCurrentLang.filter(w => !w.stats?.mc?.archived);
-    
-    if (allCurrentLang.length < 3 || eligibleWords.length === 0) {
+  const generateQuiz = () => {
+    const eligibleWords = currentLangWords.filter(w => !w.stats?.mc?.archived);
+    if (currentLangWords.length < 3 || eligibleWords.length === 0) {
       setQuizWord(null);
       return;
     }
 
     const randomWord = eligibleWords[Math.floor(Math.random() * eligibleWords.length)];
-    const otherOptions = allCurrentLang
+    const otherOptions = currentLangWords
       .filter(w => w.id !== randomWord.id)
       .sort(() => 0.5 - Math.random())
       .slice(0, 3)
@@ -378,7 +319,7 @@ const App = () => {
 
   useEffect(() => { 
     if (activeTab === 'quiz' && !quizFeedback) generateQuiz(); 
-  }, [activeTab, langMode, words]);
+  }, [activeTab, langMode, words.length]);
 
   const archivedCount = currentLangWords.filter(w => w.stats?.mc?.archived).length;
   const progress = currentLangWords.length > 0 ? (archivedCount / currentLangWords.length) * 100 : 0;
@@ -387,27 +328,26 @@ const App = () => {
     <div className="flex h-screen items-center justify-center bg-[#FDFCF8]">
       <div className="text-center">
         <Loader2 className="animate-spin text-[#2D4F1E] w-10 h-10 mx-auto mb-4" />
-        <p className="font-black text-[#2D4F1E] tracking-tighter">加載獵區中...</p>
+        <p className="font-black text-[#2D4F1E]">進入獵場中...</p>
       </div>
     </div>
   );
 
   if (!user) return (
-    <div className="flex h-screen items-center justify-center bg-[#FDFCF8] p-6">
-      <div className="max-w-sm w-full bg-white p-8 rounded-[2.5rem] shadow-xl border border-stone-100 text-center">
-        <div className="w-16 h-16 bg-[#2D4F1E] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[#2D4F1E]/20">
+    <div className="flex h-screen items-center justify-center bg-[#FDFCF8] p-6 text-stone-800">
+      <div className="max-w-sm w-full bg-white p-8 rounded-[2.5rem] shadow-xl text-center border border-stone-100">
+        <div className="w-16 h-16 bg-[#2D4F1E] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
           <Compass className="text-white w-8 h-8" />
         </div>
-        <h1 className="text-2xl font-black text-stone-800 mb-2">VocabHunter</h1>
-        <p className="text-stone-400 text-sm font-medium mb-8">同步你的單字獵場，跨裝置狩獵</p>
-        
+        <h1 className="text-2xl font-black mb-2">VocabHunter</h1>
+        <p className="text-stone-400 text-sm mb-8">同步你的單字獵場</p>
         <div className="space-y-3">
-          <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border border-stone-200 text-stone-700 rounded-2xl font-black flex items-center justify-center gap-3 shadow-sm active:scale-95 transition-all">
+          <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border border-stone-200 text-stone-700 rounded-2xl font-black flex items-center justify-center gap-3 active:scale-95 transition-all">
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-            使用 Google 登入
+            Google 登入
           </button>
-          <button onClick={handleAnonymousLogin} className="w-full py-4 bg-stone-50 text-stone-500 rounded-2xl font-bold text-sm active:scale-95 transition-all">
-            直接進入 (訪客模式)
+          <button onClick={() => signInAnonymously(auth)} className="w-full py-4 bg-stone-50 text-stone-500 rounded-2xl font-bold text-sm active:scale-95 transition-all">
+            訪客模式
           </button>
         </div>
       </div>
@@ -415,46 +355,25 @@ const App = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#FDFCF8] text-stone-800 pb-28 font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#FDFCF8] text-stone-800 pb-28 font-sans">
       <header className="bg-white/80 backdrop-blur-lg border-b sticky top-0 z-40 px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 flex items-center justify-center bg-[#2D4F1E] rounded-lg shadow-lg">
+          <div className="w-8 h-8 flex items-center justify-center bg-[#2D4F1E] rounded-lg">
             <Compass className="text-white w-5 h-5" />
           </div>
-          <span className="text-xl font-black text-[#2D4F1E] hidden sm:inline">VocabHunter</span>
+          <span className="text-xl font-black text-[#2D4F1E]">VocabHunter</span>
         </div>
         
-        <div className="flex items-center gap-2">
-          <div className="bg-stone-100 p-1 rounded-lg flex border text-[10px] font-black mr-2">
-            <button onClick={() => setLangMode('EN')} className={`px-3 py-1 rounded-md transition-all ${langMode === 'EN' ? 'bg-[#2D4F1E] text-white' : 'text-stone-400'}`}>EN</button>
-            <button onClick={() => setLangMode('JP')} className={`px-3 py-1 rounded-md transition-all ${langMode === 'JP' ? 'bg-[#C2410C] text-white' : 'text-stone-400'}`}>JP</button>
+        <div className="flex items-center gap-3">
+          <div className="bg-stone-100 p-1 rounded-lg flex border text-[10px] font-black">
+            <button onClick={() => setLangMode('EN')} className={`px-3 py-1 rounded-md ${langMode === 'EN' ? 'bg-[#2D4F1E] text-white' : 'text-stone-400'}`}>EN</button>
+            <button onClick={() => setLangMode('JP')} className={`px-3 py-1 rounded-md ${langMode === 'JP' ? 'bg-[#C2410C] text-white' : 'text-stone-400'}`}>JP</button>
           </div>
-          
-          <div className="flex items-center gap-2 pl-2 border-l border-stone-100">
-            <div className="flex items-center gap-1.5 bg-stone-100 px-2 py-1 rounded-full border border-stone-200">
-              {user.isAnonymous ? (
-                <div className="w-7 h-7 rounded-full bg-stone-300 flex items-center justify-center text-stone-600"><UserIcon size={14} /></div>
-              ) : (
-                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=2D4F1E&color=fff`} className="w-7 h-7 rounded-full border border-stone-200" alt="U" />
-              )}
-              <span className="text-[10px] font-black text-stone-500 pr-1 uppercase truncate max-w-[80px]">{user.isAnonymous ? 'Guest' : (user.displayName || 'User')}</span>
-            </div>
-            <button onClick={handleSignOut} className="p-2 text-stone-400 hover:text-red-500 active:scale-90 transition-all rounded-full hover:bg-red-50">
-              <LogOut size={18}/>
-            </button>
-          </div>
+          <button onClick={handleSignOut} className="p-2 text-stone-400 hover:text-red-500 transition-all">
+            <LogOut size={18}/>
+          </button>
         </div>
       </header>
-
-      {errorMsg && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top-4 fade-in duration-300">
-          <div className="bg-stone-800 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-stone-700">
-            <AlertCircle size={20} className="text-orange-400 flex-shrink-0" />
-            <span className="font-black text-sm">{errorMsg}</span>
-            <button onClick={() => setErrorMsg(null)} className="ml-2 text-stone-400"><X size={14}/></button>
-          </div>
-        </div>
-      )}
 
       <main className="max-w-4xl mx-auto p-4 md:p-6">
         <div className="flex bg-stone-200/50 p-1 rounded-xl mb-6 shadow-inner">
@@ -475,12 +394,9 @@ const App = () => {
                     <input 
                       type="text" 
                       placeholder="單字..." 
-                      className={`w-full px-4 py-3 bg-stone-50 border-2 rounded-xl focus:bg-white focus:border-[#2D4F1E] outline-none font-bold text-sm transition-all ${duplicateAlert ? 'border-red-500 animate-shake' : 'border-transparent'}`} 
+                      className={`w-full px-4 py-3 bg-stone-50 border-2 rounded-xl focus:bg-white focus:border-[#2D4F1E] outline-none font-bold text-sm transition-all ${duplicateAlert ? 'border-red-500' : 'border-transparent'}`} 
                       value={newWord.term} 
-                      onChange={(e) => {
-                        setNewWord({ ...newWord, term: e.target.value });
-                        if (duplicateAlert) setDuplicateAlert(false);
-                      }} 
+                      onChange={(e) => setNewWord({ ...newWord, term: e.target.value })} 
                     />
                     <button type="button" onClick={fetchTranslation} className="absolute right-3 top-3 text-[#2D4F1E]">
                       {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
@@ -494,7 +410,7 @@ const App = () => {
                     onChange={(e) => setNewWord({ ...newWord, definition: e.target.value })} 
                   />
                 </div>
-                <button type="submit" disabled={!newWord.term || !newWord.definition} className="w-full py-3 rounded-xl font-black text-white bg-[#2D4F1E] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all disabled:opacity-30">
+                <button type="submit" disabled={!newWord.term || !newWord.definition} className="w-full py-3 rounded-xl font-black text-white bg-[#2D4F1E] flex items-center justify-center gap-2 shadow-md active:scale-95 disabled:opacity-30">
                   <Plus size={18} /> 收錄單字
                 </button>
               </form>
@@ -521,8 +437,8 @@ const App = () => {
                       <p className="text-stone-400 text-sm font-medium">{word.definition}</p>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button onClick={(e) => { e.stopPropagation(); speak(word.term, word.lang); }} className="p-3 text-stone-300 hover:text-[#2D4F1E] active:scale-90 transition-all"><Volume2 size={20}/></button>
-                      <button onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', word.id)); }} className="p-3 text-stone-200 hover:text-red-500 active:scale-90 transition-all"><Trash2 size={20}/></button>
+                      <button onClick={(e) => { e.stopPropagation(); speak(word.term, word.lang); }} className="p-3 text-stone-300 hover:text-[#2D4F1E]"><Volume2 size={20}/></button>
+                      <button onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', word.id)); }} className="p-3 text-stone-200 hover:text-red-500"><Trash2 size={20}/></button>
                     </div>
                   </div>
                 ))
@@ -531,14 +447,14 @@ const App = () => {
           </div>
         ) : (
           <div className="max-w-md mx-auto py-4">
-            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-stone-100 text-center min-h-[440px] flex flex-col justify-center relative">
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-stone-100 text-center min-h-[440px] flex flex-col justify-center relative overflow-hidden">
               {quizFeedback && (
-                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 bg-white/95 backdrop-blur-md animate-in fade-in zoom-in duration-300">
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 bg-white/95 backdrop-blur-md animate-in fade-in duration-300">
                   <div className={`p-6 rounded-full mb-6 ${quizFeedback.status === 'correct' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-700'}`}>
                     {quizFeedback.status === 'correct' ? <Target size={80} className="animate-bounce" /> : <XCircle size={80} />}
                   </div>
                   <h2 className={`text-3xl font-black mb-3 ${quizFeedback.status === 'correct' ? 'text-green-600' : 'text-red-700'}`}>{quizFeedback.status === 'correct' ? 'Bingo!' : 'Oops!'}</h2>
-                  <p className={`text-base font-black px-6 py-3 rounded-2xl shadow-sm ${quizFeedback.status === 'correct' ? 'bg-green-500 text-white' : 'bg-stone-100 text-stone-600'}`}>{quizFeedback.message}</p>
+                  <p className={`text-base font-black px-6 py-3 rounded-2xl ${quizFeedback.status === 'correct' ? 'bg-green-500 text-white' : 'bg-stone-100 text-stone-600'}`}>{quizFeedback.message}</p>
                 </div>
               )}
               {!quizWord ? (
@@ -549,13 +465,13 @@ const App = () => {
               ) : (
                 <>
                   <div className="flex justify-between items-start mb-6">
-                    <span className="bg-stone-100 px-3 py-1 rounded-full text-[10px] font-black text-stone-400 uppercase tracking-widest">Quiz Session</span>
-                    <button onClick={() => speak(quizWord.term, quizWord.lang)} className="p-3 bg-stone-50 rounded-full border border-stone-100 hover:bg-stone-100 transition-colors"><Volume2 size={24} className="text-[#2D4F1E]"/></button>
+                    <span className="bg-stone-100 px-3 py-1 rounded-full text-[10px] font-black text-stone-400 uppercase tracking-widest">QUIZ</span>
+                    <button onClick={() => speak(quizWord.term, quizWord.lang)} className="p-3 bg-stone-50 rounded-full border border-stone-100"><Volume2 size={24} className="text-[#2D4F1E]"/></button>
                   </div>
                   <h2 className="text-4xl font-black mb-10 text-stone-800 break-words">{quizWord.term}</h2>
                   <div className="grid gap-3">
                     {options.map((opt, i) => (
-                      <button key={i} onClick={() => handleQuizAnswer(opt)} disabled={!!quizFeedback} className="py-4 px-6 bg-stone-50 border-2 border-stone-100 rounded-2xl font-bold text-sm text-stone-700 active:bg-[#2D4F1E] active:text-white hover:border-[#2D4F1E]/30 transition-all">
+                      <button key={i} onClick={() => handleQuizAnswer(opt)} disabled={!!quizFeedback} className="py-4 px-6 bg-stone-50 border-2 border-stone-100 rounded-2xl font-bold text-sm text-stone-700 hover:border-[#2D4F1E]/30 transition-all">
                         {opt}
                       </button>
                     ))}
@@ -567,15 +483,16 @@ const App = () => {
         )}
       </main>
 
+      {/* 解析 Modal */}
       {selectedWord && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center animate-in fade-in duration-200 px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4">
           <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
           <div className="relative w-full max-w-lg bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full duration-300">
             <div className="bg-[#2D4F1E] p-8 text-white relative">
-              <button onClick={() => setSelectedWord(null)} className="absolute right-6 top-6 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"><X size={20}/></button>
+              <button onClick={() => setSelectedWord(null)} className="absolute right-6 top-6 p-2 bg-white/10 rounded-full"><X size={20}/></button>
               <div className="flex items-center gap-4 mb-2">
                 <h2 className="text-3xl font-black">{selectedWord.term}</h2>
-                <button onClick={() => speak(selectedWord.term, selectedWord.lang)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"><Volume2 size={18}/></button>
+                <button onClick={() => speak(selectedWord.term, selectedWord.lang)} className="p-2 bg-white/20 rounded-lg"><Volume2 size={18}/></button>
               </div>
               <p className="text-white/80 font-bold text-lg">{selectedWord.definition}</p>
             </div>
@@ -584,7 +501,7 @@ const App = () => {
               {isExplaining ? (
                 <div className="flex flex-col items-center justify-center py-10 gap-4 text-stone-400 font-bold">
                   <Loader2 size={32} className="animate-spin text-[#2D4F1E]" /> 
-                  <p className="animate-pulse">AI 獵人正在解析獵物...</p>
+                  <p>AI 獵人正在解析獵物...</p>
                 </div>
               ) : explanation ? (
                 <>
@@ -605,7 +522,7 @@ const App = () => {
                       <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider">實戰例句</h4>
                     </div>
                     <div className="bg-stone-50 p-5 rounded-2xl border-l-4 border-[#2D4F1E]">
-                      <p className="font-bold text-stone-800 mb-2 italic leading-relaxed">"{explanation.example_original}"</p>
+                      <p className="font-bold text-stone-800 mb-2 italic">"{explanation.example_original}"</p>
                       <p className="text-stone-500 text-sm font-medium">{explanation.example_zh}</p>
                     </div>
                   </section>
@@ -613,7 +530,7 @@ const App = () => {
                   <section>
                     <div className="flex items-center gap-2 mb-3">
                       <Layers size={16} className="text-[#C2410C]" />
-                      <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider">近義字推薦</h4>
+                      <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider">近義字</h4>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {explanation.synonyms?.map((s, i) => (
@@ -627,49 +544,40 @@ const App = () => {
                   <section>
                     <div className="flex items-center gap-2 mb-3">
                       <Sparkles size={16} className="text-amber-500" />
-                      <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider">狩獵筆記 (記憶點)</h4>
+                      <h4 className="text-xs font-black text-stone-800 uppercase tracking-wider">狩獵筆記</h4>
                     </div>
                     <p className="text-sm font-bold text-amber-900 leading-relaxed bg-amber-50 p-4 rounded-2xl border border-amber-100">
                       {explanation.tips}
                     </p>
                   </section>
                 </>
-              ) : (
-                <div className="text-center py-6">
-                  <button onClick={() => fetchExplanation(selectedWord)} className="px-6 py-2 bg-stone-100 text-stone-600 rounded-xl font-black hover:bg-stone-200 transition-colors">重新獲取解析</button>
-                </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
       )}
 
       {/* 底部進度條 */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 z-40 bg-gradient-to-t from-[#FDFCF8] via-[#FDFCF8]/90 to-transparent">
+      <div className="fixed bottom-0 left-0 right-0 p-4 z-40 bg-gradient-to-t from-[#FDFCF8] to-transparent">
         <div className="max-w-2xl mx-auto bg-white/90 backdrop-blur-xl border border-stone-100 p-3 rounded-2xl shadow-xl flex items-center gap-4">
           <div className="flex flex-col items-center min-w-[50px]">
-            <span className="text-[8px] font-black text-stone-300 uppercase">PROGRESS</span>
+            <span className="text-[8px] font-black text-stone-300">PROGRESS</span>
             <span className="text-sm font-black text-[#2D4F1E]">{archivedCount}/{currentLangWords.length}</span>
           </div>
           <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[#2D4F1E] transition-all duration-1000 ease-out" style={{ width: `${progress}%` }}></div>
+            <div className="h-full bg-[#2D4F1E] transition-all duration-700" style={{ width: `${progress}%` }}></div>
           </div>
           <span className="text-lg font-black text-[#2D4F1E]">{Math.round(progress)}%</span>
         </div>
       </div>
 
-      <style>{`
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-4px); }
-          75% { transform: translateX(4px); }
-        }
-        .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #D1D5DB; }
-      `}</style>
+      {errorMsg && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] bg-stone-800 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+          <AlertCircle size={20} className="text-orange-400" />
+          <span className="font-black text-sm">{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="ml-2"><X size={14}/></button>
+        </div>
+      )}
     </div>
   );
 };
