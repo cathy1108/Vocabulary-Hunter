@@ -200,30 +200,6 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = async (mode = 'auto') => {
-    setErrorMessage("");
-    setAuthLoading(true);
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-
-    try {
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || mode === 'redirect';
-      
-      if (isMobile) {
-        // 手機版使用 Redirect (較穩定，不會被阻擋彈出視窗)
-        await signInWithRedirect(auth, provider);
-      } else {
-        // 電腦版使用 Popup
-        const result = await signInWithPopup(auth, provider);
-        setUser(result.user);
-      }
-    } catch (err) { 
-      console.error("Google Login Error:", err);
-      setErrorMessage(`登入失敗: ${err.message}`);
-      setAuthLoading(false);
-    }
-  };
-
   // ========================================================
   // 📊 資料同步 (符合 RULE 1 & 2)
   // ========================================================
@@ -406,13 +382,7 @@ const App = () => {
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
               Google 帳號登入
             </button>
-            
-            <button 
-              onClick={() => handleLogin('redirect')} 
-              className="w-full py-3 text-[10px] text-stone-400 font-bold border border-dashed border-stone-200 rounded-xl hover:bg-stone-50"
-            >
-              手機版登入沒反應？點此嘗試強效模式
-            </button>
+          
 
             <div className="py-2 flex items-center gap-2">
               <div className="h-px bg-stone-100 flex-1"></div>
