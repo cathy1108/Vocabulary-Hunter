@@ -65,13 +65,16 @@ const GEMINI_MODEL = "gemini-1.5-flash";
 const apiCache = new Map();
 
 // ========================================================
-// 🛡️ API 輔助函式 (修復 JSON 解析錯誤)
+// 🛡️ API 輔助函式 (修復 404 與解析錯誤)
 // ========================================================
 const fetchGemini = async (prompt, isJson = false) => {
   const cacheKey = `${isJson ? 'json:' : 'text:'}${prompt}`;
   if (apiCache.has(cacheKey)) return apiCache.get(cacheKey);
 
+  // 在正式環境中使用環境變數，Canvas 環境則由系統處理 Key
   const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
+  
+  // 修正 URL: 確保路徑與型號名稱正確
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
   
   const payload = {
@@ -81,7 +84,7 @@ const fetchGemini = async (prompt, isJson = false) => {
   if (isJson) {
     payload.generationConfig = { 
       responseMimeType: "application/json",
-      temperature: 0.2 // 降低隨機性，提高 JSON 穩定度
+      temperature: 0.1 
     };
   }
 
@@ -94,6 +97,10 @@ const fetchGemini = async (prompt, isJson = false) => {
         body: JSON.stringify(payload)
       });
 
+      if (response.status === 404) {
+        throw new Error("API 型號路徑不存在 (404)，請檢查模型名稱或 API 版本");
+      }
+
       if (response.status === 429) {
         await new Promise(r => setTimeout(r, delay));
         delay *= 2;
@@ -104,10 +111,10 @@ const fetchGemini = async (prompt, isJson = false) => {
       if (data.error) throw new Error(data.error.message);
 
       let result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!result) throw new Error("無效的 API 回應");
+      if (!result) throw new Error("無效的 API 回應內容");
 
-      // 修復：移除 AI 可能回傳的 Markdown JSON 標記
       if (isJson) {
+        // 清理 Markdown 標籤以防萬一
         result = result.replace(/```json/g, "").replace(/```/g, "").trim();
       }
 
@@ -115,6 +122,7 @@ const fetchGemini = async (prompt, isJson = false) => {
       return result;
     } catch (e) {
       if (i === 4) throw e;
+      if (e.message.includes("404")) throw e; // 404 不重試
       await new Promise(r => setTimeout(r, delay));
       delay *= 2;
     }
