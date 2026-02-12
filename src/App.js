@@ -331,7 +331,7 @@ const App = () => {
   useEffect(() => { if (activeTab === 'quiz') generateQuiz(); }, [activeTab, langMode, words.length]);
 
   const handleQuizAnswer = async (ans) => {
-    if (quizFeedback || !quizWord || isTransitioning.current) return;
+    if (quizFeedback || !quizWord || isTransitioning.current || !user) return;
     isTransitioning.current = true;
     const isCorrect = ans === quizWord.definition;
     setQuizFeedback({ status: isCorrect ? 'correct' : 'wrong', message: isCorrect ? '✨ 擊中標靶！' : `❌ 答案是：${quizWord.definition}` });
@@ -339,7 +339,9 @@ const App = () => {
     if (isCorrect) {
       const stats = quizWord.stats?.mc || { correct: 0, total: 0, archived: false };
       const newCorrect = stats.correct + 1;
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', quizWord.id), { 
+      // 修正：更新文件時的路徑
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', quizWord.id);
+      await updateDoc(docRef, { 
         "stats.mc": { total: stats.total + 1, correct: newCorrect, archived: newCorrect >= 3 } 
       });
     }
