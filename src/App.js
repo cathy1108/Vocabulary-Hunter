@@ -74,7 +74,7 @@ const fetchGemini = async (prompt, isJson = false) => {
   if (apiCache.has(cacheKey)) return apiCache.get(cacheKey);
 
   const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
   
   const payload = {
     contents: [{ parts: [{ text: prompt }] }]
