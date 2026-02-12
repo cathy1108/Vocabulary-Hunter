@@ -99,6 +99,7 @@ const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
 
 // ========================================================
@@ -398,7 +399,8 @@ const App = () => {
           <p className="text-stone-400 font-bold mb-10 leading-relaxed px-4">捕捉單字，建立屬於你的<br/>智慧獵場</p>
           <div className="space-y-4">
             <button 
-              onClick={() => handleLogin('auto')} 
+    
+              onClick={() => signInWithPopup(auth, provider)}
               className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-bold text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95"
             >
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
