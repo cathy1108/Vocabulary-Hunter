@@ -40,7 +40,7 @@ import {
   UserCircle,
   Award,
   Flame,
-  ChevronRight
+  User
 } from 'lucide-react';
 
 // ========================================================
@@ -126,26 +126,19 @@ const App = () => {
   };
 
   // ========================================================
-  // 🔐 認證邏輯 (修復手機版無限重置問題)
+  // 🔐 認證邏輯
   // ========================================================
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // 1. 先檢查是否有 Redirect 回來的結果
         const redirectResult = await getRedirectResult(auth);
-        if (redirectResult) {
-          // 如果是 Redirect 回來的，setUser 會由 onAuthStateChanged 處理
-          return;
-        }
+        if (redirectResult) return;
 
-        // 2. 處理 Canvas 環境 Token 或 匿名登入
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          // 只有在完全沒有使用者時才進行匿名登入
-          if (!auth.currentUser) {
-            await signInAnonymously(auth);
-          }
+        } else if (!auth.currentUser) {
+          // 預設可不自動匿名登入，讓使用者手動選，或視需求保留
+          // await signInAnonymously(auth);
         }
       } catch (err) {
         console.error("Auth Init Error", err);
@@ -157,7 +150,7 @@ const App = () => {
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      if (u) setAuthLoading(false);
+      setAuthLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -165,7 +158,6 @@ const App = () => {
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      // 手機瀏覽器通常不支援 Popup，自動偵測並切換
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (isMobile) {
         await signInWithRedirect(auth, provider);
@@ -189,10 +181,13 @@ const App = () => {
   };
 
   // ========================================================
-  // 📊 資料同步
+  // 📊 資料同步 (Firestore RULE 1 & 2)
   // ========================================================
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setWords([]);
+      return;
+    }
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
     const unsubscribe = onSnapshot(query(wordsRef), 
       (snapshot) => {
@@ -385,7 +380,9 @@ const App = () => {
           </div>
           <span className="font-black text-xl text-stone-800">VocabHunter</span>
         </div>
+        
         <div className="flex items-center gap-3">
+          {/* Language Toggle */}
           <div className="bg-stone-100 p-1 rounded-2xl flex border border-stone-200/50">
             {['EN', 'JP'].map(l => (
               <button 
@@ -397,9 +394,34 @@ const App = () => {
               </button>
             ))}
           </div>
-          <button onClick={() => signOut(auth)} className="text-stone-300 hover:text-red-500 p-2 transition-all">
-            <LogOut size={22}/>
-          </button>
+
+          {/* User Account Status */}
+          <div className="flex items-center gap-2 bg-stone-50 p-1.5 pr-3 rounded-full border border-stone-200 ml-2">
+            {user.photoURL ? (
+              <img 
+                src={user.photoURL} 
+                alt={user.displayName} 
+                className="w-8 h-8 rounded-full border border-white shadow-sm"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-[#2D4F1E] flex items-center justify-center text-white">
+                <User size={16} />
+              </div>
+            )}
+            <div className="hidden sm:flex flex-col">
+              <span className="text-[10px] font-black text-stone-700 leading-none">
+                {user.isAnonymous ? '匿名獵人' : (user.displayName || '使用者')}
+              </span>
+            </div>
+            <button 
+              onClick={() => signOut(auth)} 
+              className="ml-1 p-1 text-stone-300 hover:text-red-500 transition-all"
+              title="登出"
+            >
+              <LogOut size={18}/>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -543,7 +565,7 @@ const App = () => {
         )}
       </main>
 
-      {/* AI 分析 Bottom Sheet / Modal */}
+      {/* AI 分析 Bottom Sheet */}
       {selectedWord && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
