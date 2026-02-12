@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 
 // ========================================================
-// 🛠️ 基礎配置與環境變數處理
+// 🛠️ 基礎配置與環境變數處理 (與之前設定一致)
 // ========================================================
 const isCanvas = typeof __app_id !== 'undefined';
 const analysisCache = new Map();
@@ -95,6 +95,9 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   }
 };
 
+// ========================================================
+// 📱 主程式
+// ========================================================
 const App = () => {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -126,7 +129,7 @@ const App = () => {
   };
 
   // ========================================================
-  // 🔐 認證邏輯 (RULE 3)
+  // 🔐 認證邏輯 (RULE 3 - 與登入頭像邏輯一致)
   // ========================================================
   useEffect(() => {
     const initAuth = async () => {
@@ -136,6 +139,8 @@ const App = () => {
 
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          // 如果沒有 token 也不在登入狀態，保持 loading 讓使用者選登入方式
         }
       } catch (err) {
         console.error("Auth Init Error", err);
@@ -333,6 +338,9 @@ const App = () => {
     ? (words.filter(w => w.lang === langMode && w.stats?.mc?.archived).length / words.filter(w => w.lang === langMode).length) * 100 
     : 0;
 
+  // ========================================================
+  // 🖼️ 渲染組件
+  // ========================================================
   if (authLoading) return (
     <div className="min-h-screen bg-[#FDFCF8] flex flex-col items-center justify-center">
       <div className="relative">
@@ -343,327 +351,362 @@ const App = () => {
     </div>
   );
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-[#FDFCF8] flex items-center justify-center p-6 relative overflow-hidden">
-        <div className="absolute top-[-5%] right-[-5%] w-64 h-64 bg-[#2D4F1E]/5 rounded-full blur-3xl"></div>
-        <div className="w-full max-w-sm bg-white p-10 rounded-[3.5rem] shadow-[0_20px_50px_rgba(45,79,30,0.1)] text-center border border-stone-100 z-10">
-          <div className="w-24 h-24 bg-[#2D4F1E] rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl transform -rotate-3">
-            <Compass className="text-white w-12 h-12" />
-          </div>
-          <h1 className="text-4xl font-black text-stone-800 mb-3 tracking-tight">VocabHunter</h1>
-          <p className="text-stone-400 font-bold mb-10 leading-relaxed px-4">捕捉單字，建立屬於你的<br/>智慧獵場</p>
-          <div className="space-y-4">
-            <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-black text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95 group">
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
-              使用 Google 登入
-            </button>
-            <button onClick={handleAnonymousLogin} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 hover:shadow-lg transition-all active:scale-95">
-              <UserCircle size={20} /> 匿名獵人試玩
-            </button>
-          </div>
-        </div>
+  if (!user) return (
+    <div className="min-h-screen bg-[#FDFCF8] flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-24 h-24 bg-[#E8F0E5] rounded-full flex items-center justify-center mb-8 border-4 border-white shadow-xl">
+        <Compass className="w-12 h-12 text-[#2D4F1E]" />
       </div>
-    );
-  }
+      <h1 className="text-3xl font-black text-[#2D4F1E] mb-4 tracking-tighter">VOCAB HUNTER</h1>
+      <p className="text-[#6B7C65] mb-12 max-w-xs leading-relaxed">捕捉每一個陌生的詞彙，轉化為你的知識獵物。</p>
+      
+      <div className="space-y-4 w-full max-w-sm">
+        <button 
+          onClick={handleGoogleLogin}
+          className="w-full bg-[#2D4F1E] text-white py-4 rounded-2xl font-bold shadow-lg shadow-[#2D4F1E]/20 flex items-center justify-center gap-3 hover:scale-105 transition-all"
+        >
+          <User className="w-5 h-5" /> 使用 Google 登入
+        </button>
+        <button 
+          onClick={handleAnonymousLogin}
+          className="w-full bg-white border-2 border-[#E8F0E5] text-[#2D4F1E] py-4 rounded-2xl font-bold hover:bg-[#F5F8F4] transition-all"
+        >
+          訪客試用
+        </button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-[100dvh] bg-[#FDFCF8] text-stone-800 pb-36 font-sans select-none overflow-x-hidden">
-      <header className="bg-white/80 backdrop-blur-2xl border-b border-stone-100 sticky top-0 z-40 px-6 h-20 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <div className="bg-[#2D4F1E] p-2 rounded-xl">
-            <Compass size={20} className="text-white"/>
+    <div className="min-h-screen bg-[#FDFCF8] text-[#2D4F1E] font-sans pb-24">
+      {/* Top Header */}
+      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-30 px-5 py-4 flex items-center justify-between border-b border-[#E8F0E5]">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-[#2D4F1E] rounded-xl flex items-center justify-center shadow-lg shadow-[#2D4F1E]/20">
+            <Compass className="w-6 h-6 text-[#FDFCF8]" />
           </div>
-          <span className="font-black text-xl text-stone-800">VocabHunter</span>
+          <span className="font-black text-xl tracking-tighter">HUNTER</span>
         </div>
         
-        <div className="flex items-center gap-3">
-          <div className="bg-stone-100 p-1 rounded-2xl flex border border-stone-200/50">
-            {['EN', 'JP'].map(l => (
-              <button 
-                key={l} 
-                onClick={() => setLangMode(l)} 
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${langMode === l ? (l === 'EN' ? 'bg-[#2D4F1E]' : 'bg-[#C2410C]') + ' text-white shadow-md scale-105' : 'text-stone-400'}`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 bg-stone-50 p-1.5 pr-3 rounded-full border border-stone-200 ml-2">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setLangMode(prev => prev === 'EN' ? 'JP' : 'EN')}
+            className="bg-[#E8F0E5] px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 border border-[#D5E2D1]"
+          >
+            <Layers className="w-3.5 h-3.5" /> {langMode === 'EN' ? 'ENGLISH' : 'JAPANESE'}
+          </button>
+          
+          <div className="relative group">
             {user.photoURL ? (
-              <img 
-                src={user.photoURL} 
-                alt={user.displayName} 
-                className="w-8 h-8 rounded-full border border-white shadow-sm"
-                referrerPolicy="no-referrer"
-              />
+              <img src={user.photoURL} className="w-10 h-10 rounded-xl border-2 border-white shadow-md cursor-pointer" alt="Avatar" />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-[#2D4F1E] flex items-center justify-center text-white">
-                <User size={16} />
+              <div className="w-10 h-10 bg-[#E8F0E5] rounded-xl flex items-center justify-center border-2 border-white shadow-md cursor-pointer">
+                <UserCircle className="w-6 h-6 text-[#2D4F1E]" />
               </div>
             )}
-            <div className="hidden sm:flex flex-col">
-              <span className="text-[10px] font-black text-stone-700 leading-none">
-                {user.isAnonymous ? '匿名獵人' : (user.displayName || '使用者')}
-              </span>
-            </div>
-            <button onClick={() => signOut(auth)} className="ml-1 p-1 text-stone-300 hover:text-red-500 transition-all">
-              <LogOut size={18}/>
+            <button 
+              onClick={() => signOut(auth)}
+              className="absolute right-0 top-12 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-red-500 p-3 rounded-xl shadow-xl border border-red-50 flex items-center gap-2 text-xs font-bold"
+            >
+              <LogOut className="w-4 h-4" /> 登出
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto p-4 md:p-8">
-        <div className="flex bg-stone-100/50 p-1.5 rounded-[2rem] mb-8 border border-stone-200/30">
-          <button onClick={() => setActiveTab('list')} className={`flex-1 py-4 rounded-[1.6rem] font-black text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'list' ? 'bg-white shadow-md text-[#2D4F1E]' : 'text-stone-400'}`}>
-            <BookOpen size={20}/> 我的獵場
-          </button>
-          <button onClick={() => setActiveTab('quiz')} className={`flex-1 py-4 rounded-[1.6rem] font-black text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'quiz' ? 'bg-white shadow-md text-[#2D4F1E]' : 'text-stone-400'}`}>
-            <Trophy size={20}/> 捕獲練習
-          </button>
-        </div>
-
-        {activeTab === 'list' ? (
-          <div className="flex flex-col gap-8 animate-in fade-in duration-500">
-            <form onSubmit={addWord} className={`bg-white p-6 md:p-8 rounded-[2.5rem] shadow-[0_15px_40px_rgba(0,0,0,0.03)] border border-stone-100 space-y-4 ${duplicateAlert ? 'animate-shake border-red-200' : ''}`}>
-              <div className="relative">
-                <input 
-                  type="text" 
-                  placeholder={langMode === 'JP' ? "輸入日文單字..." : "輸入英文單字..."} 
-                  className="w-full px-6 py-5 bg-stone-50 border-2 border-transparent rounded-[1.8rem] focus:border-[#2D4F1E]/10 focus:bg-white outline-none font-black text-2xl transition-all" 
-                  value={newWord.term} 
-                  onChange={(e) => handleInputChange(e.target.value)} 
-                />
-                <button 
-                  type="button" 
-                  onClick={() => checkAndTranslate(newWord.term)} 
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#2D4F1E] w-12 h-12 flex items-center justify-center bg-white rounded-2xl shadow-sm border border-stone-100 active:scale-90 transition-all"
-                >
-                  {isProcessing ? <Loader2 className="animate-spin w-5 h-5"/> : <Search size={22}/>}
-                </button>
-              </div>
-
-              {spellCheck && (
-                <div className="flex items-center gap-3 text-amber-700 bg-amber-50 px-5 py-4 rounded-2xl border border-amber-100 animate-in slide-in-from-top-2">
-                  <AlertCircle size={18} className="shrink-0"/>
-                  <div className="text-sm font-bold">
-                    您是指 <button type="button" onClick={() => { setNewWord(p => ({...p, term: spellCheck})); setSearchTerm(spellCheck); setSpellCheck(null); checkAndTranslate(spellCheck); }} className="mx-1 px-2 py-0.5 bg-amber-200/50 rounded-lg text-amber-900 underline decoration-2">{spellCheck}</button> 嗎？
-                  </div>
-                </div>
-              )}
-              
-              {searchTerm && (
-                <div className="animate-in fade-in slide-in-from-top-2 space-y-4">
-                  <input 
-                    type="text" 
-                    placeholder="翻譯結果..." 
-                    className="w-full px-6 py-5 bg-stone-50 border-2 border-transparent rounded-[1.8rem] focus:border-[#2D4F1E]/10 focus:bg-white outline-none font-bold text-stone-600 text-xl transition-all" 
-                    value={newWord.definition} 
-                    onChange={(e) => setNewWord({...newWord, definition: e.target.value})} 
-                  />
-                  <button type="submit" className="w-full py-5 bg-[#2D4F1E] text-white rounded-[1.8rem] font-black text-lg flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg shadow-[#2D4F1E]/10">
-                    <Plus size={24}/> 收錄單字
-                  </button>
-                </div>
-              )}
-            </form>
-
+      {/* Hero Stats */}
+      <section className="p-5">
+        <div className="bg-[#2D4F1E] rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl shadow-[#2D4F1E]/20">
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-[#C5D9BE] text-xs font-black tracking-widest uppercase mb-2">
+              <Award className="w-4 h-4" /> {langMode === 'EN' ? 'Hunter Rank' : 'ハンターランク'}
+            </div>
+            <h2 className="text-4xl font-black mb-6">Lv.{Math.floor(progress/10) + 1}</h2>
+            
             <div className="space-y-4">
-              {words.filter(w => w.lang === langMode && (w.term.toLowerCase().includes(searchTerm.toLowerCase()) || searchTerm === '')).map(word => (
+              <div className="flex justify-between items-end text-xs font-bold">
+                <span>捕獲進度</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
+              <div className="h-3 bg-white/10 rounded-full overflow-hidden">
                 <div 
-                  key={word.id} 
-                  onClick={() => fetchExplanation(word)} 
-                  className="group bg-white p-6 rounded-[2rem] border border-stone-50 shadow-sm flex justify-between items-center hover:shadow-md transition-all cursor-pointer active:scale-[0.98]"
-                >
-                  <div className="flex-1 pr-4">
-                    <div className="flex items-center gap-3">
-                      <span className="font-black text-2xl text-stone-800">{word.term}</span>
-                      {word.stats?.mc?.archived && (
-                        <div className="bg-orange-50 text-orange-600 px-2 py-1 rounded-lg flex items-center gap-1 animate-pulse">
-                          <Award size={14} className="fill-orange-500"/>
-                          <span className="text-[10px] font-black">MASTERED</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-stone-400 font-bold mt-1 line-clamp-1">{word.definition}</div>
+                  className="h-full bg-[#A5D6A7] transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(165,214,167,0.5)]"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <Flame className="absolute -right-8 -bottom-8 w-48 h-48 text-white/5 rotate-12" />
+        </div>
+      </section>
+
+      {/* Main Content Area */}
+      <main className="px-5">
+        {activeTab === 'list' ? (
+          <div className="space-y-6">
+            {/* Search & Add */}
+            <div className="relative">
+              <div className="bg-white rounded-3xl p-4 shadow-sm border border-[#E8F0E5] focus-within:ring-2 ring-[#2D4F1E]/10 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="bg-[#FDFCF8] p-3 rounded-2xl">
+                    <Search className="w-5 h-5 text-[#6B7C65]" />
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); speak(word.term, word.lang); }} className="w-12 h-12 flex items-center justify-center text-stone-200 hover:text-[#2D4F1E] transition-all">
-                      <Volume2 size={24}/>
+                  <input 
+                    placeholder={langMode === 'EN' ? "輸入單字 (Capture new word...)" : "単語を入力..."}
+                    className="flex-1 bg-transparent border-none outline-none font-bold text-lg placeholder:text-[#BCC6B9]"
+                    value={newWord.term}
+                    onChange={(e) => handleInputChange(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addWord()}
+                  />
+                  {(newWord.term || isProcessing) && (
+                    <button 
+                      onClick={addWord}
+                      disabled={isProcessing || !newWord.definition}
+                      className="bg-[#2D4F1E] text-white p-3 rounded-2xl shadow-lg disabled:opacity-30 transition-all hover:scale-110 active:scale-95"
+                    >
+                      {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', word.id)); }} className="w-12 h-12 flex items-center justify-center text-stone-100 hover:text-red-400 transition-all">
-                      <Trash2 size={20}/>
-                    </button>
-                  </div>
+                  )}
                 </div>
-              ))}
+                
+                {spellCheck && (
+                  <div className="mt-4 pt-4 border-t border-[#F1F5F0] flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-500" />
+                    <span className="text-xs font-bold text-[#6B7C65]">
+                      你是指 <button onClick={() => handleInputChange(spellCheck)} className="text-[#2D4F1E] underline">{spellCheck}</button> 嗎？
+                    </span>
+                  </div>
+                )}
+                
+                {newWord.definition && !isProcessing && (
+                  <div className="mt-4 pt-4 border-t border-[#F1F5F0] animate-in fade-in slide-in-from-top-2">
+                    <span className="text-xs font-black text-[#6B7C65] uppercase tracking-wider block mb-1">AUTO TRANSLATE</span>
+                    <p className="text-[#2D4F1E] font-bold text-lg">{newWord.definition}</p>
+                  </div>
+                )}
+              </div>
+              {duplicateAlert && (
+                <div className="absolute -top-12 left-0 right-0 flex justify-center animate-bounce">
+                  <span className="bg-amber-100 text-amber-700 px-4 py-2 rounded-full text-xs font-black shadow-lg border border-amber-200">
+                    ⚠️ 此獵物已在清單中
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* List Header */}
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-xs uppercase tracking-[0.2em] text-[#6B7C65]">Collection ({words.filter(w => w.lang === langMode).length})</h3>
+            </div>
+
+            {/* Word List */}
+            <div className="grid gap-4">
+              {words.filter(w => w.lang === langMode).length === 0 ? (
+                <div className="py-20 text-center space-y-4 opacity-40">
+                  <div className="w-16 h-16 bg-[#E8F0E5] rounded-full mx-auto flex items-center justify-center">
+                    <Target className="w-8 h-8" />
+                  </div>
+                  <p className="text-sm font-bold italic">目前還沒有捕獲紀錄...</p>
+                </div>
+              ) : (
+                words.filter(w => w.lang === langMode).map(word => (
+                  <div 
+                    key={word.id}
+                    className="group bg-white rounded-[2rem] p-5 shadow-sm border border-[#E8F0E5] hover:shadow-xl hover:shadow-[#2D4F1E]/5 transition-all"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-3">
+                          <h4 className="text-xl font-black tracking-tight">{word.term}</h4>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); speak(word.term, word.lang); }}
+                            className="p-2 bg-[#FDFCF8] rounded-xl hover:bg-[#E8F0E5] transition-colors"
+                          >
+                            <Volume2 className="w-4 h-4 text-[#6B7C65]" />
+                          </button>
+                        </div>
+                        <p className="text-[#6B7C65] font-medium">{word.definition}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        {word.stats?.mc?.archived && <Trophy className="w-5 h-5 text-amber-400 fill-amber-400" />}
+                        <button 
+                          onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', word.id))}
+                          className="opacity-0 group-hover:opacity-100 p-2 text-red-200 hover:text-red-500 transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-6 flex items-center gap-2">
+                      <button 
+                        onClick={() => fetchExplanation(word)}
+                        className="flex-1 bg-[#FDFCF8] py-3 rounded-2xl text-xs font-black border border-[#E8F0E5] flex items-center justify-center gap-2 hover:bg-[#2D4F1E] hover:text-white transition-all"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" /> AI 深度分析
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         ) : (
-          <div className="max-w-md mx-auto animate-in zoom-in duration-300">
-            <div className="bg-white p-10 rounded-[3.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.05)] border border-stone-100 text-center min-h-[520px] flex flex-col justify-between relative overflow-hidden">
-              {quizFeedback && (
-                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm animate-in fade-in zoom-in">
-                  <div className={`p-10 rounded-full mb-8 ${quizFeedback.status === 'correct' ? 'bg-green-50 text-green-600 shadow-xl shadow-green-100' : 'bg-red-50 text-red-600 shadow-xl shadow-red-100'}`}>
-                    {quizFeedback.status === 'correct' ? <Target size={100} className="animate-bounce" /> : <X size={100} />}
-                  </div>
-                  <h2 className="text-3xl font-black mb-4 tracking-tight">{quizFeedback.status === 'correct' ? '擊中標靶！' : '失手了！'}</h2>
-                  <p className="font-black text-stone-500 text-lg">{quizFeedback.message}</p>
+          /* Quiz Tab */
+          <div className="min-h-[50vh] flex flex-col justify-center gap-8 py-10">
+            {words.filter(w => w.lang === langMode).length < 3 ? (
+              <div className="text-center space-y-6">
+                <div className="w-20 h-20 bg-[#E8F0E5] rounded-full mx-auto flex items-center justify-center">
+                  <BookOpen className="w-10 h-10 text-[#6B7C65]" />
                 </div>
-              )}
+                <h3 className="text-xl font-black">獵場封鎖中</h3>
+                <p className="text-sm text-[#6B7C65] font-medium leading-relaxed px-10">
+                  你需要至少捕獲 3 個單字，<br/>才能開啟測驗模式。
+                </p>
+                <button 
+                  onClick={() => setActiveTab('list')}
+                  className="bg-[#2D4F1E] text-white px-8 py-3 rounded-2xl font-black text-sm"
+                >
+                  去捕捉單字
+                </button>
+              </div>
+            ) : quizWord && (
+              <div className="animate-in zoom-in-95 duration-300">
+                <div className="text-center mb-12">
+                  <div className="inline-block bg-[#E8F0E5] px-4 py-1 rounded-full text-[10px] font-black tracking-widest text-[#2D4F1E] mb-4 uppercase">
+                    QUIZ MODE
+                  </div>
+                  <h2 className="text-5xl font-black tracking-tighter mb-4">{quizWord.term}</h2>
+                  <button onClick={() => speak(quizWord.term, quizWord.lang)} className="p-3 bg-white rounded-2xl shadow-sm border border-[#E8F0E5]">
+                    <Volume2 className="w-6 h-6" />
+                  </button>
+                </div>
 
-              {words.filter(w => w.lang === langMode).length < 3 ? (
-                <div className="my-auto text-stone-300 font-bold p-10 text-center space-y-6">
-                  <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto">
-                    <Plus size={32} />
-                  </div>
-                  <p className="text-lg">獵場資源不足<br/><span className="text-sm opacity-60">至少需要 3 個單字來啟動訓練</span></p>
-                </div>
-              ) : !quizWord ? (
-                <div className="my-auto py-20 flex flex-col items-center gap-6">
-                  <Loader2 className="animate-spin text-[#2D4F1E]/20 w-16 h-16" />
-                  <p className="font-black text-stone-300 tracking-widest text-xs uppercase">Tracking Target...</p>
-                </div>
-              ) : (
-                <>
-                  <div className="mb-10 pt-6">
-                    <button onClick={() => speak(quizWord.term, quizWord.lang)} className="w-24 h-24 bg-[#2D4F1E] rounded-[2.5rem] text-white shadow-2xl flex items-center justify-center mx-auto mb-8 active:scale-90 transition-all group">
-                      <Volume2 size={48} className="group-hover:rotate-6 transition-transform"/>
+                <div className="grid gap-3">
+                  {options.map((opt, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleQuizAnswer(opt)}
+                      disabled={!!quizFeedback}
+                      className={`
+                        w-full py-5 px-6 rounded-[1.8rem] font-bold text-left transition-all relative overflow-hidden border-2
+                        ${quizFeedback ? (opt === quizWord.definition ? 'bg-green-50 border-green-200' : 'bg-white border-transparent opacity-50') : 'bg-white border-transparent shadow-sm hover:border-[#2D4F1E] hover:scale-[1.02]'}
+                      `}
+                    >
+                      <span className="relative z-10">{opt}</span>
                     </button>
-                    <h2 className="text-5xl font-black text-stone-800 tracking-tight">{quizWord.term}</h2>
+                  ))}
+                </div>
+
+                {quizFeedback && (
+                  <div className={`mt-8 text-center animate-in slide-in-from-bottom-4 font-black text-xl ${quizFeedback.status === 'correct' ? 'text-green-600' : 'text-amber-600'}`}>
+                    {quizFeedback.message}
                   </div>
-                  <div className="grid gap-4">
-                    {options.map((opt, i) => (
-                      <button 
-                        key={i} 
-                        onClick={() => handleQuizAnswer(opt)} 
-                        className="py-5 px-8 bg-stone-50 border-2 border-stone-50 rounded-[1.8rem] font-black text-stone-700 hover:bg-white hover:border-[#2D4F1E]/20 active:bg-[#2D4F1E] active:text-white transition-all text-lg shadow-sm"
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>
 
+      {/* Detail Overlay (AI Explanation) */}
       {selectedWord && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6 animate-in fade-in duration-300">
-          <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
-          <div className="relative w-full max-w-lg bg-white rounded-t-[3.5rem] md:rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] animate-in slide-in-from-bottom-20 duration-500">
-            <div className={`${selectedWord.lang === 'JP' ? 'bg-[#C2410C]' : 'bg-[#2D4F1E]'} px-8 pt-12 pb-10 text-white`}>
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-4">
-                    <h2 className="text-4xl font-black tracking-tight">{selectedWord.term}</h2>
-                    <button onClick={() => speak(selectedWord.term, selectedWord.lang)} className="p-2.5 bg-white/20 hover:bg-white/30 rounded-xl backdrop-blur transition-all active:scale-90">
-                      <Volume2 size={22}/>
-                    </button>
-                  </div>
-                  <p className="text-white/80 font-bold text-xl mt-2">{selectedWord.definition}</p>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="absolute inset-0 bg-[#2D4F1E]/40 backdrop-blur-sm" onClick={() => { setSelectedWord(null); setExplanation(null); }} />
+          <div className="relative w-full max-w-lg bg-white sm:rounded-[2.5rem] rounded-t-[2.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full duration-300">
+            <div className="p-8">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="text-3xl font-black mb-1">{selectedWord.term}</h3>
+                  <p className="text-lg font-bold text-[#6B7C65]">{selectedWord.definition}</p>
                 </div>
-                <button onClick={() => setSelectedWord(null)} className="w-12 h-12 flex items-center justify-center bg-black/10 hover:bg-black/20 rounded-full transition-all">
-                  <X size={24}/>
+                <button onClick={() => { setSelectedWord(null); setExplanation(null); }} className="p-2 hover:bg-[#FDFCF8] rounded-full transition-colors">
+                  <X className="w-6 h-6" />
                 </button>
               </div>
-            </div>
-            
-            <div className="p-8 space-y-8 overflow-y-auto flex-1">
+
               {isExplaining ? (
-                <div className="py-24 text-center">
-                  <Sparkles className="mx-auto mb-6 animate-pulse text-[#2D4F1E]/20" size={80} />
-                  <p className="font-black text-stone-300 tracking-[0.3em] text-xs uppercase">AI Hunter Analyzing...</p>
+                <div className="py-20 flex flex-col items-center gap-6">
+                  <div className="relative">
+                    <Loader2 className="w-12 h-12 text-[#2D4F1E] animate-spin" />
+                    <Sparkles className="absolute inset-0 m-auto w-5 h-5 text-[#2D4F1E]/30" />
+                  </div>
+                  <p className="text-xs font-black tracking-widest text-[#6B7C65] animate-pulse">AI 正在深度掃描獵物屬性...</p>
                 </div>
-              ) : explanation && (
-                <>
+              ) : explanation ? (
+                <div className="space-y-8 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-stone-50 p-5 rounded-[1.8rem] border border-stone-100">
-                      <p className="text-[10px] font-black text-stone-300 uppercase tracking-widest mb-2">詞性</p>
-                      <p className="font-black text-stone-700 text-lg">{explanation.pos}</p>
+                    <div className="bg-[#FDFCF8] p-4 rounded-3xl border border-[#E8F0E5]">
+                      <span className="text-[10px] font-black text-[#6B7C65] uppercase tracking-wider block mb-1">音標/讀法</span>
+                      <p className="font-bold">{explanation.phonetic}</p>
                     </div>
-                    <div className="bg-stone-50 p-5 rounded-[1.8rem] border border-stone-100">
-                      <p className="text-[10px] font-black text-stone-300 uppercase tracking-widest mb-2">讀法/音標</p>
-                      <p className="font-black text-[#2D4F1E] text-lg font-mono">{explanation.phonetic}</p>
+                    <div className="bg-[#FDFCF8] p-4 rounded-3xl border border-[#E8F0E5]">
+                      <span className="text-[10px] font-black text-[#6B7C65] uppercase tracking-wider block mb-1">詞性</span>
+                      <p className="font-bold">{explanation.pos}</p>
                     </div>
                   </div>
 
-                  <section className="space-y-4">
-                    <div className="flex items-center justify-between font-black text-stone-300 text-[10px] uppercase tracking-widest">
-                      <span className="flex items-center gap-2"><PlayCircle size={14}/> 實戰例句</span>
-                      <button onClick={() => speak(explanation.example_original, selectedWord.lang)} className="flex items-center gap-2 text-[#2D4F1E] hover:bg-stone-100 px-4 py-1.5 rounded-xl transition-all active:scale-95 border border-stone-100">
-                        <Volume2 size={16}/> 播放
-                      </button>
-                    </div>
-                    <div className="bg-stone-50 p-6 rounded-[2rem] border-l-[6px] border-[#2D4F1E] shadow-sm">
-                      <p className="font-black text-stone-800 mb-3 leading-relaxed text-xl italic group">
-                        "{explanation.example_original}"
-                      </p>
-                      <p className="text-stone-500 font-bold text-base">{explanation.example_zh}</p>
-                    </div>
-                  </section>
+                  <div className="bg-[#E8F0E5]/30 p-5 rounded-3xl border border-[#D5E2D1]">
+                    <span className="text-[10px] font-black text-[#2D4F1E] uppercase tracking-wider block mb-3">使用範例</span>
+                    <p className="text-lg font-medium italic mb-2 leading-relaxed">"{explanation.example_original}"</p>
+                    <p className="text-sm font-bold text-[#6B7C65]">{explanation.example_zh}</p>
+                  </div>
 
-                  <section className="space-y-4">
-                    <div className="flex items-center gap-2 font-black text-stone-300 text-[10px] uppercase tracking-widest">
-                      <Layers size={14}/> 同義詞參考
-                    </div>
-                    <div className="flex flex-wrap gap-2.5">
-                      {explanation.synonyms?.map((s, i) => (
-                        <span key={i} className="px-5 py-3 bg-white border border-stone-100 text-stone-600 rounded-2xl text-sm font-black shadow-sm">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </section>
-
-                  <section className="bg-orange-50/50 p-6 rounded-[2.5rem] border border-orange-100/50 relative overflow-hidden group">
-                    <Flame className="absolute -right-2 -bottom-2 text-orange-100 group-hover:text-orange-200 transition-colors" size={80} />
-                    <div className="relative z-10">
-                      <div className="flex items-center gap-2 font-black text-orange-600 text-[10px] uppercase tracking-widest mb-3">
-                        <Sparkles size={14}/> 獵人記憶提示
+                  {explanation.synonyms?.length > 0 && (
+                    <div className="space-y-3">
+                      <span className="text-[10px] font-black text-[#6B7C65] uppercase tracking-wider block">相關近義</span>
+                      <div className="flex flex-wrap gap-2">
+                        {explanation.synonyms.map((s, i) => (
+                          <span key={i} className="bg-white px-4 py-2 rounded-2xl text-xs font-bold border border-[#E8F0E5] shadow-sm">{s}</span>
+                        ))}
                       </div>
-                      <p className="text-orange-900 font-bold text-base leading-relaxed">
-                        {explanation.tips}
-                      </p>
                     </div>
-                  </section>
-                </>
+                  )}
+
+                  <div className="space-y-3">
+                    <span className="text-[10px] font-black text-[#6B7C65] uppercase tracking-wider block">記憶建議</span>
+                    <p className="text-sm font-medium leading-relaxed bg-amber-50/50 p-4 rounded-3xl border border-amber-100 italic text-amber-800">
+                      💡 {explanation.tips}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-20 text-center text-red-400 font-bold">分析失敗，請重試</div>
               )}
             </div>
           </div>
         </div>
       )}
 
-      <div className="fixed bottom-6 left-6 right-6 z-40">
-        <div className="max-w-md mx-auto bg-white/70 backdrop-blur-2xl border border-stone-100 p-5 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] flex items-center gap-5">
-          <div className="bg-[#2D4F1E]/5 p-3 rounded-2xl">
-              <Trophy size={20} className="text-[#2D4F1E]" />
-          </div>
-          <div className="flex-1 flex flex-col gap-2">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">當前語言熟練度</span>
-              <span className="font-black text-sm text-[#2D4F1E]">{Math.round(progress)}%</span>
-            </div>
-            <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden shadow-inner">
-              <div 
-                className="h-full bg-gradient-to-r from-[#2D4F1E] to-[#4c8133] transition-all duration-1000 ease-out" 
-                style={{ width: `${progress}%` }}
-              ></div>
-            </div>
-          </div>
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-6 left-6 right-6 z-40">
+        <div className="bg-[#2D4F1E]/95 backdrop-blur-xl rounded-[2.5rem] p-3 flex justify-between items-center shadow-2xl shadow-[#2D4F1E]/40 border border-white/10">
+          <button 
+            onClick={() => setActiveTab('list')}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 transition-all ${activeTab === 'list' ? 'text-[#A5D6A7]' : 'text-white/40'}`}
+          >
+            <Layers className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-tighter">Collection</span>
+          </button>
+          
+          <div className="w-px h-8 bg-white/10" />
+          
+          <button 
+            onClick={() => setActiveTab('quiz')}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 transition-all ${activeTab === 'quiz' ? 'text-[#A5D6A7]' : 'text-white/40'}`}
+          >
+            <PlayCircle className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-tighter">Hunting</span>
+          </button>
         </div>
-      </div>
+      </nav>
 
-      <style>{`
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
-        .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
-      `}</style>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FDFCF8; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #E8F0E5; border-radius: 10px; }
+      `}} />
     </div>
   );
 };
