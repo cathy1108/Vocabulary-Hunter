@@ -10,7 +10,8 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  browserPopupBlockedHandler
+  setPersistence,
+  browserLocalPersistence
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -108,6 +109,7 @@ const App = () => {
   const [isExplaining, setIsExplaining] = useState(false);
   const [spellCheck, setSpellCheck] = useState(null);
   const [loginError, setLoginError] = useState(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const typingTimer = useRef(null);
 
   const [quizWord, setQuizWord] = useState(null);
@@ -125,57 +127,72 @@ const App = () => {
   };
 
   // ========================================================
-  // 🔐 認證邏輯 (針對手機版優化)
+  // 🔐 認證邏輯 (針對手機版與 ITP 優化)
   // ========================================================
   useEffect(() => {
-    const initAuth = async () => {
+    const handleAuth = async () => {
       try {
-        // 重要：處理 Redirect 跳轉回來的結果
+        // 1. 強制設定持久化為 Local，這對手機版瀏覽器較穩定
+        await setPersistence(auth, browserLocalPersistence);
+
+        // 2. 處理 Redirect 成功跳轉回來的結果
+        // 這是手機登入最關鍵的一步
         const result = await getRedirectResult(auth);
         if (result?.user) {
           setUser(result.user);
         }
 
+        // 3. 處理 Canvas 環境的 Token
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         }
       } catch (err) {
         console.error("Auth Init Error", err);
-        if (err.code === 'auth/cross-origin-auth-not-supported-by-browser') {
-          setLoginError("您的瀏覽器限制了跨站登入，請嘗試關閉『防止跨網站追蹤』或使用 Chrome。");
+        // 如果是跨站追蹤導致的錯誤，給予友善提示
+        if (err.code === 'auth/cross-origin-auth-not-supported-by-browser' || err.code === 'auth/internal-error') {
+          setLoginError("登入受到瀏覽器限制。建議使用 Chrome 或點擊『匿名試玩』來保存單字。");
         }
       } finally {
-        setAuthLoading(false);
+        // 注意：這裡不設 setAuthLoading(false)，交給 onAuthStateChanged 統一處理
       }
     };
 
-    initAuth();
+    handleAuth();
+
+    // 監聽登入狀態改變
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
+      setIsLoggingIn(false);
+    }, (error) => {
+      console.error("AuthStateChanged Error", error);
+      setAuthLoading(false);
     });
+
     return () => unsubscribe();
   }, []);
 
   const handleGoogleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     setLoginError(null);
+    
     const provider = new GoogleAuthProvider();
-    // 增加 Scopes 確保權限完整
-    provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+    provider.setCustomParameters({ prompt: 'select_account' });
     
     try {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
+      // 在手機或特定的內建瀏覽器（如 Line/FB）中，Popup 幾乎一定會失敗
+      // 這裡強制手機使用 Redirect
       if (isMobile) {
-        // 手機版：使用重新導向，避免彈出視窗被攔截
         await signInWithRedirect(auth, provider);
       } else {
-        // 電腦版：使用彈出視窗
         try {
           await signInWithPopup(auth, provider);
         } catch (popupErr) {
-          if (popupErr.code === 'auth/popup-blocked') {
-            // 如果 Popup 被攔截，降級使用 Redirect
+          // 如果彈出視窗被攔截，則降級為 Redirect
+          if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
             await signInWithRedirect(auth, provider);
           } else {
             throw popupErr;
@@ -184,7 +201,8 @@ const App = () => {
       }
     } catch (err) { 
       console.error("Google Login Error:", err);
-      setLoginError("登入失敗，請檢查網路連線或瀏覽器設定。");
+      setIsLoggingIn(false);
+      setLoginError("無法啟動登入視窗，請嘗試重新整理頁面。");
     }
   };
 
@@ -194,7 +212,7 @@ const App = () => {
       await signInAnonymously(auth); 
     } catch (err) { 
       console.error(err); 
-      setLoginError("匿名登入失敗。");
+      setLoginError("匿名進入失敗，請檢查網路。");
     } finally {
       setAuthLoading(false);
     }
@@ -214,12 +232,17 @@ const App = () => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setWords(data.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
       }, 
-      (error) => console.warn("Firestore Error:", error.message)
+      (error) => {
+        console.warn("Firestore Error:", error.message);
+        // 如果是權限錯誤，通常是因為 Auth 還沒完全同步
+      }
     );
     return () => unsubscribe();
   }, [user]);
 
-  // 其餘功能與 UI 邏輯保持一致...
+  // ========================================================
+  // 📝 功能邏輯
+  // ========================================================
   const checkAndTranslate = async (term) => {
     if (!term || term.length < 2 || isProcessing) return;
     setIsProcessing(true);
@@ -354,7 +377,7 @@ const App = () => {
         <Loader2 className="animate-spin text-[#2D4F1E] w-16 h-16" />
         <Compass className="absolute inset-0 m-auto text-[#2D4F1E]/20 w-8 h-8" />
       </div>
-      <p className="mt-6 font-black text-[#2D4F1E] tracking-[0.2em] animate-pulse text-sm">正在進入獵場...</p>
+      <p className="mt-6 font-black text-[#2D4F1E] tracking-[0.2em] animate-pulse text-sm">正在讀取獵場資料...</p>
     </div>
   );
 
@@ -370,21 +393,26 @@ const App = () => {
           <p className="text-stone-400 font-bold mb-6 leading-relaxed px-4">捕捉單字，建立屬於你的<br/>智慧獵場</p>
           
           {loginError && (
-             <div className="mb-6 p-4 bg-red-50 text-red-700 text-xs font-bold rounded-2xl border border-red-100 flex items-center gap-2 text-left">
+              <div className="mb-6 p-4 bg-red-50 text-red-700 text-xs font-bold rounded-2xl border border-red-100 flex items-center gap-2 text-left">
                 <AlertCircle size={16} className="shrink-0" />
                 <span>{loginError}</span>
-             </div>
+              </div>
           )}
 
           <div className="space-y-4">
-            <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-black text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95 group">
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
-              使用 Google 登入
+            <button 
+              disabled={isLoggingIn}
+              onClick={handleGoogleLogin} 
+              className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-black text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95 group disabled:opacity-50"
+            >
+              {isLoggingIn ? <Loader2 className="animate-spin w-5 h-5" /> : <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />}
+              {isLoggingIn ? "正在連接..." : "使用 Google 登入"}
             </button>
             <button onClick={handleAnonymousLogin} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 hover:shadow-lg transition-all active:scale-95">
               <UserCircle size={20} /> 匿名獵人試玩
             </button>
           </div>
+          <p className="mt-6 text-[10px] text-stone-300 font-bold">登入後即可在不同裝置同步你的單字庫</p>
         </div>
       </div>
     );
@@ -392,7 +420,6 @@ const App = () => {
 
   return (
     <div className="min-h-[100dvh] bg-[#FDFCF8] text-stone-800 pb-36 font-sans select-none overflow-x-hidden">
-      {/* 導航欄與後續 UI */}
       <header className="bg-white/80 backdrop-blur-2xl border-b border-stone-100 sticky top-0 z-40 px-6 h-20 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2.5">
           <div className="bg-[#2D4F1E] p-2 rounded-xl">
@@ -526,8 +553,8 @@ const App = () => {
                 </div>
               ) : !quizWord ? (
                 <div className="my-auto py-20 flex flex-col items-center gap-6">
-                  <Loader2 className="animate-spin text-[#2D4F1E]/20 w-16 h-16" />
-                  <p className="font-black text-stone-300 tracking-widest text-xs uppercase">Tracking Target...</p>
+                  <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center animate-pulse"><Target className="text-stone-100" size={32} /></div>
+                  <p className="font-black text-stone-300 tracking-widest text-xs uppercase">正在尋找目標...</p>
                 </div>
               ) : (
                 <>
@@ -549,7 +576,7 @@ const App = () => {
         )}
       </main>
 
-      {/* AI 分析 Bottom Sheet 略... 保持原本邏輯 */}
+      {/* AI 分析 Bottom Sheet */}
       {selectedWord && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
@@ -571,7 +598,7 @@ const App = () => {
               {isExplaining ? (
                 <div className="py-24 text-center">
                   <Sparkles className="mx-auto mb-6 animate-pulse text-[#2D4F1E]/20" size={80} />
-                  <p className="font-black text-stone-300 tracking-[0.3em] text-xs uppercase">AI Hunter Analyzing...</p>
+                  <p className="font-black text-stone-300 tracking-[0.3em] text-xs uppercase">AI 獵人正在分析中...</p>
                 </div>
               ) : explanation && (
                 <>
@@ -644,6 +671,7 @@ const App = () => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
         body { overflow-x: hidden; touch-action: manipulation; }
         button { -webkit-tap-highlight-color: transparent; }
+        input, button { font-family: inherit; }
       `}</style>
     </div>
   );
