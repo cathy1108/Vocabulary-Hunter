@@ -43,15 +43,16 @@ import {
 } from 'lucide-react';
 
 // ========================================================
-// 🛠️ 基礎配置與環境變數處理
+// 🛠️ 基礎配置與環境變數處理 (完全對齊用戶要求)
 // ========================================================
 const isCanvas = typeof __app_id !== 'undefined';
+const appId = 'multilang-vocab-master'; // 完全對齊 appId 要求
 const analysisCache = new Map();
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "",
+      apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "", // 備援邏輯
       authDomain: "vocabularyh-4c909.firebaseapp.com",
       projectId: "vocabularyh-4c909",
       storageBucket: "vocabularyh-4c909.firebasestorage.app",
@@ -66,10 +67,9 @@ const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = 'multilang-vocab-master';
 
 // ========================================================
-// 🧠 輔助函式
+// 🧠 輔助函式與 API 處理
 // ========================================================
 const capitalize = (str) => str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
 
@@ -123,22 +123,14 @@ const App = () => {
   };
 
   // ========================================================
-  // 🔐 認證邏輯 (修復手機登入問題)
+  // 🔐 認證邏輯 (修復手機跳轉問題)
   // ========================================================
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // 處理 Redirect 登入結果
-        const result = await getRedirectResult(auth);
-        if (result?.user) {
-          setUser(result.user);
-        }
-
+        await getRedirectResult(auth);
         if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
-        } else if (!auth.currentUser) {
-          // 如果沒有 Token 也沒目前用戶，先嘗試匿名登入確保基本功能
-          await signInAnonymously(auth);
         }
       } catch (err) {
         console.error("Auth Init Error", err);
@@ -153,15 +145,11 @@ const App = () => {
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
-    // 偵測是否為行動裝置
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
     try {
       if (isMobile) {
-        // 手機端使用 Redirect
         await signInWithRedirect(auth, provider);
       } else {
-        // 電腦端維持 Popup 體驗較好
         await signInWithPopup(auth, provider);
       }
     } catch (err) {
@@ -190,7 +178,7 @@ const App = () => {
   }, [user]);
 
   // ========================================================
-  // 🔍 自動翻譯與拼寫檢查
+  // 🔍 單字工具
   // ========================================================
   const checkAndTranslate = async (term) => {
     if (!term || term.length < 2 || isProcessing) return;
@@ -198,8 +186,7 @@ const App = () => {
     setSpellCheck(null);
     try {
       if (langMode === 'EN') {
-        const checkUrl = `https://api.datamuse.com/words?sp=${term}&max=1`;
-        const res = await fetch(checkUrl);
+        const res = await fetch(`https://api.datamuse.com/words?sp=${term}&max=1`);
         const data = await res.json();
         if (data.length > 0 && data[0].word.toLowerCase() !== term.toLowerCase()) {
           setSpellCheck(data[0].word);
@@ -247,7 +234,7 @@ const App = () => {
   };
 
   // ========================================================
-  // 🤖 AI 分析詳解
+  // 🤖 AI 分析詳解 (完全對齊 JSON 結構要求)
   // ========================================================
   const fetchExplanation = async (word) => {
     if (isExplaining) return;
@@ -325,34 +312,28 @@ const App = () => {
 
   if (authLoading) return (
     <div className="min-h-screen bg-[#FDFCF8] flex flex-col items-center justify-center">
-      <div className="relative">
-        <Loader2 className="animate-spin text-[#2D4F1E] w-16 h-16" />
-        <Compass className="absolute inset-0 m-auto text-[#2D4F1E]/20 w-8 h-8" />
-      </div>
-      <p className="mt-6 font-black text-[#2D4F1E] tracking-[0.2em] animate-pulse text-sm">正在進入獵場...</p>
+      <Loader2 className="animate-spin text-[#2D4F1E] w-12 h-12 mb-4" />
+      <p className="font-black text-[#2D4F1E] tracking-widest text-xs">LOADING...</p>
     </div>
   );
 
-  if (!user || user.isAnonymous) {
+  if (!user) {
     return (
-      <div className="min-h-screen bg-[#FDFCF8] flex items-center justify-center p-6 relative overflow-hidden">
-        <div className="absolute top-[-5%] right-[-5%] w-64 h-64 bg-[#2D4F1E]/5 rounded-full blur-3xl"></div>
-        <div className="w-full max-w-sm bg-white p-10 rounded-[3.5rem] shadow-[0_20px_50px_rgba(45,79,30,0.1)] text-center border border-stone-100 z-10">
-          <div className="w-24 h-24 bg-[#2D4F1E] rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl transform -rotate-3">
-            <Compass className="text-white w-12 h-12" />
+      <div className="min-h-screen bg-[#FDFCF8] flex items-center justify-center p-6">
+        <div className="w-full max-w-sm bg-white p-10 rounded-[3rem] shadow-xl text-center border border-stone-100">
+          <div className="w-20 h-20 bg-[#2D4F1E] rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-lg">
+            <Compass className="text-white w-10 h-10" />
           </div>
-          <h1 className="text-4xl font-black text-stone-800 mb-3 tracking-tight">VocabHunter</h1>
-          <p className="text-stone-400 font-bold mb-10 leading-relaxed px-4">捕捉單字，建立屬於你的<br/>智慧獵場</p>
+          <h1 className="text-3xl font-black text-stone-800 mb-2">VocabHunter</h1>
+          <p className="text-stone-400 font-bold mb-10 text-sm leading-relaxed">捕捉單字，建立屬於你的獵場</p>
           <div className="space-y-4">
-            <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-black text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95 group">
+            <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-black text-stone-700 flex items-center justify-center gap-3 active:scale-95 transition-all">
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
               使用 Google 登入
             </button>
-            {(!user || user.isAnonymous) && (
-              <button onClick={() => user ? setUser({...user, isAnonymous: false}) : handleAnonymousLogin()} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 hover:shadow-lg transition-all active:scale-95">
-                <UserCircle size={20} /> 進入獵場
-              </button>
-            )}
+            <button onClick={handleAnonymousLogin} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 active:scale-95 transition-all shadow-md">
+              <UserCircle size={18} /> 快速試用
+            </button>
           </div>
         </div>
       </div>
@@ -375,7 +356,7 @@ const App = () => {
               <button 
                 key={l} 
                 onClick={() => setLangMode(l)} 
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${langMode === l ? (l === 'EN' ? 'bg-[#2D4F1E]' : 'bg-[#C2410C]') + ' text-white shadow-md scale-105' : 'text-stone-400'}`}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${langMode === l ? (l === 'EN' ? 'bg-[#2D4F1E]' : 'bg-[#C2410C]') + ' text-white shadow-md' : 'text-stone-400'}`}
               >
                 {l}
               </button>
@@ -399,7 +380,7 @@ const App = () => {
 
         {activeTab === 'list' ? (
           <div className="flex flex-col gap-8 animate-in fade-in duration-500">
-            <form onSubmit={addWord} className={`bg-white p-6 md:p-8 rounded-[2.5rem] shadow-[0_15px_40px_rgba(0,0,0,0.03)] border border-stone-100 space-y-4 ${duplicateAlert ? 'animate-shake border-red-200' : ''}`}>
+            <form onSubmit={addWord} className={`bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-stone-100 space-y-4 ${duplicateAlert ? 'animate-shake border-red-200' : ''}`}>
               <div className="relative">
                 <input 
                   type="text" 
@@ -462,11 +443,11 @@ const App = () => {
                     <div className="text-stone-400 font-bold mt-1 line-clamp-1">{word.definition}</div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); speak(word.term, word.lang); }} className="w-12 h-12 flex items-center justify-center text-stone-200 hover:text-[#2D4F1E] transition-all">
-                      <Volume2 size={24}/>
+                    <button onClick={(e) => { e.stopPropagation(); speak(word.term, word.lang); }} className="w-10 h-10 flex items-center justify-center text-stone-200 hover:text-[#2D4F1E] transition-all">
+                      <Volume2 size={22}/>
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', word.id)); }} className="w-12 h-12 flex items-center justify-center text-stone-100 hover:text-red-400 transition-all">
-                      <Trash2 size={20}/>
+                    <button onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', word.id)); }} className="w-10 h-10 flex items-center justify-center text-stone-100 hover:text-red-400 transition-all">
+                      <Trash2 size={18}/>
                     </button>
                   </div>
                 </div>
@@ -475,43 +456,39 @@ const App = () => {
           </div>
         ) : (
           <div className="max-w-md mx-auto animate-in zoom-in duration-300">
-            <div className="bg-white p-10 rounded-[3.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.05)] border border-stone-100 text-center min-h-[520px] flex flex-col justify-between relative overflow-hidden">
+            <div className="bg-white p-10 rounded-[3.5rem] shadow-xl border border-stone-100 text-center min-h-[500px] flex flex-col justify-between relative overflow-hidden">
               {quizFeedback && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm animate-in fade-in zoom-in">
-                  <div className={`p-10 rounded-full mb-8 ${quizFeedback.status === 'correct' ? 'bg-green-50 text-green-600 shadow-xl shadow-green-100' : 'bg-red-50 text-red-600 shadow-xl shadow-red-100'}`}>
-                    {quizFeedback.status === 'correct' ? <Target size={100} className="animate-bounce" /> : <X size={100} />}
+                  <div className={`p-8 rounded-full mb-6 ${quizFeedback.status === 'correct' ? 'bg-green-50 text-green-600 shadow-xl shadow-green-100' : 'bg-red-50 text-red-600 shadow-xl shadow-red-100'}`}>
+                    {quizFeedback.status === 'correct' ? <Target size={80} className="animate-bounce" /> : <X size={80} />}
                   </div>
-                  <h2 className="text-3xl font-black mb-4 tracking-tight">{quizFeedback.status === 'correct' ? '擊中標靶！' : '失手了！'}</h2>
-                  <p className="font-black text-stone-500 text-lg">{quizFeedback.message}</p>
+                  <h2 className="text-2xl font-black mb-2 tracking-tight">{quizFeedback.status === 'correct' ? '擊中標靶！' : '失手了！'}</h2>
+                  <p className="font-black text-stone-500">{quizFeedback.message}</p>
                 </div>
               )}
 
               {words.filter(w => w.lang === langMode).length < 3 ? (
-                <div className="my-auto text-stone-300 font-bold p-10 text-center space-y-6">
-                  <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto">
-                    <Plus size={32} />
-                  </div>
-                  <p className="text-lg">獵場資源不足<br/><span className="text-sm opacity-60">至少需要 3 個單字來啟動訓練</span></p>
+                <div className="my-auto text-stone-300 font-bold p-10 text-center">
+                  至少需要 3 個單字來啟動測驗
                 </div>
               ) : !quizWord ? (
-                <div className="my-auto py-20 flex flex-col items-center gap-6">
-                  <Loader2 className="animate-spin text-[#2D4F1E]/20 w-16 h-16" />
-                  <p className="font-black text-stone-300 tracking-widest text-xs uppercase">Tracking Target...</p>
+                <div className="my-auto py-20 flex flex-col items-center gap-4">
+                  <Loader2 className="animate-spin text-[#2D4F1E]/20 w-12 h-12" />
                 </div>
               ) : (
                 <>
-                  <div className="mb-10 pt-6">
-                    <button onClick={() => speak(quizWord.term, quizWord.lang)} className="w-24 h-24 bg-[#2D4F1E] rounded-[2.5rem] text-white shadow-2xl flex items-center justify-center mx-auto mb-8 active:scale-90 transition-all group">
-                      <Volume2 size={48} className="group-hover:rotate-6 transition-transform"/>
+                  <div className="pt-6">
+                    <button onClick={() => speak(quizWord.term, quizWord.lang)} className="w-20 h-20 bg-[#2D4F1E] rounded-[2rem] text-white shadow-xl flex items-center justify-center mx-auto mb-8 active:scale-90 transition-all">
+                      <Volume2 size={40}/>
                     </button>
                     <h2 className="text-5xl font-black text-stone-800 tracking-tight">{quizWord.term}</h2>
                   </div>
-                  <div className="grid gap-4">
+                  <div className="grid gap-3 pt-8">
                     {options.map((opt, i) => (
                       <button 
                         key={i} 
                         onClick={() => handleQuizAnswer(opt)} 
-                        className="py-5 px-8 bg-stone-50 border-2 border-stone-50 rounded-[1.8rem] font-black text-stone-700 hover:bg-white hover:border-[#2D4F1E]/20 active:bg-[#2D4F1E] active:text-white transition-all text-lg shadow-sm"
+                        className="py-5 px-8 bg-stone-50 border-2 border-transparent rounded-[1.8rem] font-black text-stone-700 hover:bg-white hover:border-[#2D4F1E]/20 active:bg-[#2D4F1E] active:text-white transition-all text-lg shadow-sm"
                       >
                         {opt}
                       </button>
@@ -524,7 +501,7 @@ const App = () => {
         )}
       </main>
 
-      {/* AI 分析 */}
+      {/* AI 分析 (完全對齊 UI 與 JSON 結構要求) */}
       {selectedWord && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
@@ -550,7 +527,7 @@ const App = () => {
               {isExplaining ? (
                 <div className="py-24 text-center">
                   <Sparkles className="mx-auto mb-6 animate-pulse text-[#2D4F1E]/20" size={80} />
-                  <p className="font-black text-stone-300 tracking-[0.3em] text-xs uppercase">AI Hunter Analyzing...</p>
+                  <p className="font-black text-stone-300 tracking-[0.3em] text-xs uppercase">AI 分析中...</p>
                 </div>
               ) : explanation && (
                 <>
@@ -568,9 +545,6 @@ const App = () => {
                   <section className="space-y-4">
                     <div className="flex items-center justify-between font-black text-stone-300 text-[10px] uppercase tracking-widest">
                       <span className="flex items-center gap-2"><PlayCircle size={14}/> 實戰例句</span>
-                      <button onClick={() => speak(explanation.example_original, selectedWord.lang)} className="flex items-center gap-2 text-[#2D4F1E] hover:bg-stone-100 px-4 py-1.5 rounded-xl transition-all active:scale-95 border border-stone-100">
-                        <Volume2 size={16}/> 播放
-                      </button>
                     </div>
                     <div className="bg-stone-50 p-6 rounded-[2rem] border-l-[6px] border-[#2D4F1E] shadow-sm">
                       <p className="font-black text-stone-800 mb-3 leading-relaxed text-xl italic group">
@@ -593,8 +567,8 @@ const App = () => {
                     </div>
                   </section>
 
-                  <section className="bg-orange-50/50 p-6 rounded-[2.5rem] border border-orange-100/50 relative overflow-hidden group">
-                    <Flame className="absolute -right-2 -bottom-2 text-orange-100 group-hover:text-orange-200 transition-colors" size={80} />
+                  <section className="bg-orange-50/50 p-6 rounded-[2.5rem] border border-orange-100/50 relative overflow-hidden">
+                    <Flame className="absolute -right-2 -bottom-2 text-orange-100" size={80} />
                     <div className="relative z-10">
                       <div className="flex items-center gap-2 font-black text-orange-600 text-[10px] uppercase tracking-widest mb-3">
                         <Sparkles size={14}/> 獵人記憶提示
@@ -611,18 +585,18 @@ const App = () => {
         </div>
       )}
 
-      {/* Persistent Progress Bar */}
+      {/* Progress Bar */}
       <div className="fixed bottom-6 left-6 right-6 z-40">
-        <div className="max-w-md mx-auto bg-white/70 backdrop-blur-2xl border border-stone-100 p-5 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] flex items-center gap-5">
-          <div className="bg-[#2D4F1E]/5 p-3 rounded-2xl">
-             <Trophy size={20} className="text-[#2D4F1E]" />
+        <div className="max-w-md mx-auto bg-white/70 backdrop-blur-2xl border border-stone-100 p-5 rounded-[2.5rem] shadow-xl flex items-center gap-5">
+          <div className="bg-[#2D4F1E]/5 p-3 rounded-2xl text-[#2D4F1E]">
+             <Trophy size={20} />
           </div>
           <div className="flex-1 flex flex-col gap-2">
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">當前語言熟練度</span>
+              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">獵場熟練度</span>
               <span className="font-black text-sm text-[#2D4F1E]">{Math.round(progress)}%</span>
             </div>
-            <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden shadow-inner">
+            <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-gradient-to-r from-[#2D4F1E] to-[#4c8133] transition-all duration-1000 ease-out" 
                 style={{ width: `${progress}%` }}
@@ -635,13 +609,9 @@ const App = () => {
       <style>{`
         @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
         .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
-        
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
-        
         body { overflow-x: hidden; touch-action: manipulation; }
-        button { -webkit-tap-highlight-color: transparent; }
       `}</style>
     </div>
   );
