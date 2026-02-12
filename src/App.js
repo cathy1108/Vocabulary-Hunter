@@ -7,7 +7,9 @@ import {
   onAuthStateChanged, 
   signOut,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -37,12 +39,11 @@ import {
   AlertCircle,
   UserCircle,
   Award,
-  Flame,
-  ChevronRight
+  Flame
 } from 'lucide-react';
 
 // ========================================================
-// 🛠️ 基礎配置與環境變數處理 (確保參數準確)
+// 🛠️ 基礎配置與環境變數處理
 // ========================================================
 const isCanvas = typeof __app_id !== 'undefined';
 const analysisCache = new Map();
@@ -65,7 +66,7 @@ const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = 'multilang-vocab-master'; // 固定為用戶指定 ID
+const appId = 'multilang-vocab-master';
 
 // ========================================================
 // 🧠 輔助函式
@@ -122,14 +123,21 @@ const App = () => {
   };
 
   // ========================================================
-  // 🔐 認證邏輯 (遵照 Rule 3)
+  // 🔐 認證邏輯 (修復手機登入問題)
   // ========================================================
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // 處理 Redirect 登入結果
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          setUser(result.user);
+        }
+
         if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
+        } else if (!auth.currentUser) {
+          // 如果沒有 Token 也沒目前用戶，先嘗試匿名登入確保基本功能
           await signInAnonymously(auth);
         }
       } catch (err) {
@@ -145,7 +153,20 @@ const App = () => {
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
-    try { await signInWithPopup(auth, provider); } catch (err) { console.error(err); }
+    // 偵測是否為行動裝置
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    try {
+      if (isMobile) {
+        // 手機端使用 Redirect
+        await signInWithRedirect(auth, provider);
+      } else {
+        // 電腦端維持 Popup 體驗較好
+        await signInWithPopup(auth, provider);
+      }
+    } catch (err) {
+      console.error("Login Error", err);
+    }
   };
 
   const handleAnonymousLogin = async () => {
@@ -226,7 +247,7 @@ const App = () => {
   };
 
   // ========================================================
-  // 🤖 AI 分析詳解 (嚴格遵照指定 JSON 結構)
+  // 🤖 AI 分析詳解
   // ========================================================
   const fetchExplanation = async (word) => {
     if (isExplaining) return;
@@ -312,7 +333,7 @@ const App = () => {
     </div>
   );
 
-  if (!user) {
+  if (!user || user.isAnonymous) {
     return (
       <div className="min-h-screen bg-[#FDFCF8] flex items-center justify-center p-6 relative overflow-hidden">
         <div className="absolute top-[-5%] right-[-5%] w-64 h-64 bg-[#2D4F1E]/5 rounded-full blur-3xl"></div>
@@ -327,9 +348,11 @@ const App = () => {
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
               使用 Google 登入
             </button>
-            <button onClick={handleAnonymousLogin} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 hover:shadow-lg transition-all active:scale-95">
-              <UserCircle size={20} /> 匿名獵人試玩
-            </button>
+            {(!user || user.isAnonymous) && (
+              <button onClick={() => user ? setUser({...user, isAnonymous: false}) : handleAnonymousLogin()} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 hover:shadow-lg transition-all active:scale-95">
+                <UserCircle size={20} /> 進入獵場
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -365,7 +388,6 @@ const App = () => {
       </header>
 
       <main className="max-w-xl mx-auto p-4 md:p-8">
-        {/* Tab Switcher */}
         <div className="flex bg-stone-100/50 p-1.5 rounded-[2rem] mb-8 border border-stone-200/30">
           <button onClick={() => setActiveTab('list')} className={`flex-1 py-4 rounded-[1.6rem] font-black text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'list' ? 'bg-white shadow-md text-[#2D4F1E]' : 'text-stone-400'}`}>
             <BookOpen size={20}/> 我的獵場
@@ -377,7 +399,6 @@ const App = () => {
 
         {activeTab === 'list' ? (
           <div className="flex flex-col gap-8 animate-in fade-in duration-500">
-            {/* Input Section */}
             <form onSubmit={addWord} className={`bg-white p-6 md:p-8 rounded-[2.5rem] shadow-[0_15px_40px_rgba(0,0,0,0.03)] border border-stone-100 space-y-4 ${duplicateAlert ? 'animate-shake border-red-200' : ''}`}>
               <div className="relative">
                 <input 
@@ -421,7 +442,6 @@ const App = () => {
               )}
             </form>
 
-            {/* List Section */}
             <div className="space-y-4">
               {words.filter(w => w.lang === langMode && w.term.toLowerCase().includes(searchTerm.toLowerCase())).map(word => (
                 <div 
@@ -504,12 +524,11 @@ const App = () => {
         )}
       </main>
 
-      {/* AI 分析 Bottom Sheet / Modal */}
+      {/* AI 分析 */}
       {selectedWord && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
           <div className="relative w-full max-w-lg bg-white rounded-t-[3.5rem] md:rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] animate-in slide-in-from-bottom-20 duration-500">
-            {/* Header */}
             <div className={`${selectedWord.lang === 'JP' ? 'bg-[#C2410C]' : 'bg-[#2D4F1E]'} px-8 pt-12 pb-10 text-white`}>
               <div className="flex justify-between items-start">
                 <div className="flex-1">
