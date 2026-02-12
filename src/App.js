@@ -52,7 +52,9 @@ const analysisCache = new Map();
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-      apiKey: "", // 執行時會由環境注入
+      // 這是當環境變數不存在時的備援。
+      // 請確保在正式環境中使用 __firebase_config 注入。
+      apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
       authDomain: "vocabularyh-4c909.firebaseapp.com",
       projectId: "vocabularyh-4c909",
       storageBucket: "vocabularyh-4c909.firebasestorage.app",
@@ -61,7 +63,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
       measurementId: "G-C7KZ6SPTVC"
     };
 
-const geminiApiKey = isCanvas ? "" : "";
+const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
 const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 
 const app = initializeApp(firebaseConfig);
