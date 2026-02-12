@@ -39,7 +39,8 @@ import {
   AlertCircle,
   UserCircle,
   Award,
-  Flame
+  Flame,
+  Smartphone
 } from 'lucide-react';
 
 // ========================================================
