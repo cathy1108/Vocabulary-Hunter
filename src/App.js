@@ -169,15 +169,23 @@ const App = () => {
   // 📊 資料同步
   // ========================================================
   useEffect(() => {
-    if (!user) {
-      setWords([]);
-      return;
-    }
+    // 守衛：如果 user 還沒載入，不進行任何 Firestore 請求
+    if (!user) return;
+    
+    // 修正路徑結構為 /artifacts/{appId}/users/{userId}/{collectionName}
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
-    return onSnapshot(wordsRef, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setWords(data.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
-    }, (error) => console.error("Firestore error", error));
+    
+    const unsubscribe = onSnapshot(query(wordsRef), 
+      (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setWords(data.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
+      }, 
+      (error) => {
+        // 捕捉權限錯誤，避免 console 出現大量紅字
+        console.warn("Firestore Connection Status:", error.message);
+      }
+    );
+    return () => unsubscribe();
   }, [user]);
 
   // ========================================================
@@ -237,16 +245,16 @@ const App = () => {
     if (!newWord.term || !newWord.definition || !user) return;
     
     const term = langMode === 'EN' ? capitalize(newWord.term.trim()) : newWord.term.trim();
-    const exists = words.some(w => w.lang === langMode && w.term.toLowerCase() === term.toLowerCase());
-
-    if (exists) {
+    if (words.some(w => w.lang === langMode && w.term.toLowerCase() === term.toLowerCase())) {
       setDuplicateAlert(true);
       setTimeout(() => setDuplicateAlert(false), 1500);
       return;
     }
 
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'vocab'), {
+      // 修正：寫入時的路徑必須完全符合讀取時的路徑
+      const userVocabRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
+      await addDoc(userVocabRef, {
         term,
         definition: newWord.definition.trim(),
         lang: langMode,
@@ -256,7 +264,9 @@ const App = () => {
       setNewWord({ term: '', definition: '' });
       setSearchTerm('');
       setSpellCheck(null);
-    } catch (e) {}
+    } catch (e) {
+      console.error("Add Word Error", e);
+    }
   };
 
   // ========================================================
