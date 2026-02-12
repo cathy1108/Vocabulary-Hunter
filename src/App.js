@@ -61,7 +61,7 @@ const googleProvider = new GoogleAuthProvider();
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
 
 // 使用 Gemini 1.5 Flash
-const GEMINI_MODEL = "gemini-1.5-flash-8b"; 
+const GEMINI_MODEL = "gemini-1.5-flash"; 
 const apiCache = new Map();
 
 // ========================================================
