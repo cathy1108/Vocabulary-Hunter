@@ -158,24 +158,36 @@ const App = () => {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // 1. 強制設定 Persistence 以確保重新導向後能保留登入狀態
+        await setPersistence(auth, browserLocalPersistence);
+
+        // 2. 處理 Canvas 專用 Token
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
+          // 3. 重要：處理手機 Redirect 登入後的回傳結果
           const result = await getRedirectResult(auth);
           if (result?.user) {
+            console.log("Redirect 登入成功:", result.user.email);
             setUser(result.user);
-          } else if (!auth.currentUser) {
-            await signInAnonymously(auth);
           }
         }
       } catch (err) {
-        console.error("Auth Init Error", err);
+        console.error("Auth Init Error:", err.code, err.message);
+        // 如果是跨網域或是 authDomain 沒設好，這裡會報錯
+        if (err.code === 'auth/auth-domain-config-required') {
+          setErrorMessage("Firebase AuthDomain 配置錯誤，請檢查 Firebase Console 設定。");
+        } else {
+          setErrorMessage(`認證初始化失敗: ${err.message}`);
+        }
       } finally {
         setAuthLoading(false);
       }
     };
 
     initAuth();
+
+    // 監聽登入狀態改變
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
@@ -183,19 +195,26 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  const handleGoogleLogin = async () => {
+  const handleLogin = async (mode = 'auto') => {
+    setErrorMessage("");
+    setAuthLoading(true);
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
     try {
-      setAuthLoading(true);
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || mode === 'redirect';
+      
       if (isMobile) {
+        // 手機版使用 Redirect (較穩定，不會被阻擋彈出視窗)
         await signInWithRedirect(auth, provider);
       } else {
+        // 電腦版使用 Popup
         const result = await signInWithPopup(auth, provider);
         setUser(result.user);
       }
     } catch (err) { 
       console.error("Google Login Error:", err);
+      setErrorMessage(`登入失敗: ${err.message}`);
       setAuthLoading(false);
     }
   };
@@ -374,7 +393,7 @@ const App = () => {
           <h1 className="text-4xl font-black text-stone-800 mb-3 tracking-tight">VocabHunter</h1>
           <p className="text-stone-400 font-bold mb-10 leading-relaxed px-4">捕捉單字，建立屬於你的<br/>智慧獵場</p>
           <div className="space-y-4">
-            <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-black text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95 group">
+            <button onClick={() => handleLogin('redirect')} className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-black text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95 group">
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
               使用 Google 登入
             </button>
