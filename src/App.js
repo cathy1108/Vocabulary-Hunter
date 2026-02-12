@@ -393,10 +393,26 @@ const App = () => {
           <h1 className="text-4xl font-black text-stone-800 mb-3 tracking-tight">VocabHunter</h1>
           <p className="text-stone-400 font-bold mb-10 leading-relaxed px-4">捕捉單字，建立屬於你的<br/>智慧獵場</p>
           <div className="space-y-4">
-            <button onClick={() => handleLogin('redirect')} className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-black text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95 group">
+            <button 
+              onClick={() => handleLogin('auto')} 
+              className="w-full py-4 bg-white border-2 border-stone-100 rounded-2xl font-bold text-stone-700 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all active:scale-95"
+            >
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
-              使用 Google 登入
+              Google 帳號登入
             </button>
+            
+            <button 
+              onClick={() => handleLogin('redirect')} 
+              className="w-full py-3 text-[10px] text-stone-400 font-bold border border-dashed border-stone-200 rounded-xl hover:bg-stone-50"
+            >
+              手機版登入沒反應？點此嘗試強效模式
+            </button>
+
+            <div className="py-2 flex items-center gap-2">
+              <div className="h-px bg-stone-100 flex-1"></div>
+              <span className="text-[10px] text-stone-300 font-bold">OR</span>
+              <div className="h-px bg-stone-100 flex-1"></div>
+            </div>
             <button onClick={() => signInAnonymously(auth)} className="w-full py-4 bg-[#2D4F1E] text-white rounded-2xl font-black flex items-center justify-center gap-3 hover:shadow-lg transition-all active:scale-95">
               <UserCircle size={20} /> 匿名獵人試玩
             </button>
