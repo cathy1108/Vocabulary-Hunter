@@ -132,26 +132,17 @@ const App = () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          const result = await getRedirectResult(auth);
-          if (result?.user) {
-            setUser(result.user);
-          } else if (!auth.currentUser) {
-            await signInAnonymously(auth);
-          }
+        } else if (!auth.currentUser) {
+          // 如果沒有 Token 且未登入，才嘗試匿名或等待 Popup
         }
       } catch (err) {
-        console.error("Auth Init Error", err);
+        console.error("Auth Init Error:", err);
       } finally {
-        setAuthLoading(false);
+        setLoading(false);
       }
     };
-
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthLoading(false);
-    });
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
     return () => unsubscribe();
   }, []);
 
