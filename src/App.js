@@ -60,12 +60,12 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
 
-// 使用 Gemini 1.5 Flash (更穩定的免費額度)
+// 使用 Gemini 1.5 Flash
 const GEMINI_MODEL = "gemini-1.5-flash"; 
 const apiCache = new Map();
 
 // ========================================================
-// 🛡️ API 輔助函式
+// 🛡️ API 輔助函式 (修復 JSON 解析錯誤)
 // ========================================================
 const fetchGemini = async (prompt, isJson = false) => {
   const cacheKey = `${isJson ? 'json:' : 'text:'}${prompt}`;
@@ -79,10 +79,9 @@ const fetchGemini = async (prompt, isJson = false) => {
   };
 
   if (isJson) {
-    // 1.5 Flash 同樣支援 JSON mode
     payload.generationConfig = { 
       responseMimeType: "application/json",
-      temperature: 0.7 
+      temperature: 0.2 // 降低隨機性，提高 JSON 穩定度
     };
   }
 
@@ -104,8 +103,13 @@ const fetchGemini = async (prompt, isJson = false) => {
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
 
-      const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      let result = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!result) throw new Error("無效的 API 回應");
+
+      // 修復：移除 AI 可能回傳的 Markdown JSON 標記
+      if (isJson) {
+        result = result.replace(/```json/g, "").replace(/```/g, "").trim();
+      }
 
       apiCache.set(cacheKey, result);
       return result;
@@ -144,7 +148,6 @@ const App = () => {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         }
-        // 如果目前沒有 user，我們在 UI 上提供登入按鈕，不強迫直接匿名登入
       } catch (err) {
         console.error("Auth Error:", err);
       }
@@ -172,7 +175,6 @@ const App = () => {
   const handleGoogleLogin = async () => {
     try {
       setErrorMsg(null);
-      // 注意：有些瀏覽器會阻擋彈出視窗，確保是在 click 事件觸發
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
       console.error(err);
@@ -224,19 +226,22 @@ const App = () => {
     setExplanation(null);
     setIsExplaining(true);
     try {
-      const prompt = `Analyze: "${word.term}" (${word.lang}). Respond in Traditional Chinese JSON:
+      const prompt = `Task: Analyze the word "${word.term}" (${word.lang}).
+      Output must be strictly valid JSON in Traditional Chinese:
       {
-        "phonetic": "pronunciation",
-        "pos": "part of speech",
-        "example_original": "example sentence",
-        "example_zh": "chinese translation",
-        "synonyms": ["Word1 in english (中文1)", "Word2 in english (中文2)"],
-        "tips": "memory tip"
+        "phonetic": "pronunciation symbols",
+        "pos": "part of speech (e.g. 名詞, 動詞)",
+        "example_original": "one high-quality example sentence",
+        "example_zh": "chinese translation of example",
+        "synonyms": ["Synonym1 (中文解釋)", "Synonym2 (中文解釋)"],
+        "tips": "mnemonic tip or usage note"
       }`;
       const result = await fetchGemini(prompt, true);
-      setExplanation(JSON.parse(result));
+      const parsed = JSON.parse(result);
+      setExplanation(parsed);
     } catch (err) {
-      setErrorMsg("AI 解析失敗");
+      console.error("Parse Error:", err);
+      setErrorMsg("AI 解析格式錯誤，請再試一次");
     } finally {
       setIsExplaining(false);
     }
@@ -318,7 +323,6 @@ const App = () => {
         <h1 className="text-2xl font-black mb-2">VocabHunter</h1>
         <p className="text-stone-400 text-sm mb-8">獵取、記錄、精通每個新單字</p>
         <div className="space-y-3">
-          {/* 在 Canvas 環境下可能無法彈出 Google 登入，優先建議訪客或提醒網域授權 */}
           {!isCanvas && (
             <button onClick={handleGoogleLogin} className="w-full py-4 bg-white border border-stone-200 text-stone-700 rounded-2xl font-black flex items-center justify-center gap-3">
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
