@@ -129,6 +129,7 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [words, setWords] = useState([]);
+  const [errorMessage, setErrorMessage] = useState(""); 
   const [activeTab, setActiveTab] = useState('list');
   const [langMode, setLangMode] = useState('EN'); 
   const [newWord, setNewWord] = useState({ term: '', definition: '' });
