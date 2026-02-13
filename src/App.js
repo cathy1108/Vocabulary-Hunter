@@ -540,11 +540,25 @@ const fetchExplanation = async (wordObj) => {
   return (
     <div className="min-h-[100dvh] bg-[#FDFCF8] text-stone-800 pb-36 font-sans select-none overflow-x-hidden">
       <header className="bg-white/80 backdrop-blur-2xl border-b border-stone-100 sticky top-0 z-40 px-6 h-20 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <div className="bg-[#2D4F1E] p-2 rounded-xl">
-            <Compass size={20} className="text-white"/>
+        <div className="flex items-center gap-3 group cursor-pointer">
+          {/* 標誌圖示：結合羅盤與獵人綠 */}
+          <div className="relative">
+            <div className="bg-[#2D4F1E] p-2.5 rounded-2xl shadow-lg shadow-[#2D4F1E]/20 rotate-[-5deg] group-hover:rotate-0 transition-transform duration-300">
+              <Compass size={24} className="text-white"/>
+            </div>
+            {/* 裝飾性的小圓點 */}
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full border-2 border-white"></div>
           </div>
-          <span className="font-black text-xl text-stone-800 hidden sm:inline">VocabHunter</span>
+          
+          {/* 品牌文字：雙色設計 */}
+          <div className="flex flex-col leading-none">
+            <span className="font-black text-xl text-stone-800 tracking-tighter">
+              Vocab<span className="text-[#2D4F1E]">Hunter</span>
+            </span>
+            <span className="text-[9px] font-black text-stone-400 tracking-[0.2em] uppercase">
+              Smart Vocabulary
+            </span>
+          </div>
         </div>
         
         <div className="flex items-center gap-2 sm:gap-4">
