@@ -389,90 +389,73 @@ const addSynonym = async (synonymText) => {
 };
 
 // 2. 修改 AI 分析函式：新增快取機制
-const analyzeWord = async (wordObj) => {
-  // A. 如果資料庫已經有分析結果，直接使用，不扣 API 額度
+
+  // ========================================================
+  // 🤖 AI 分析
+  // ========================================================
+  // 統一的分析函式：整合持久化快取與實時分析
+const fetchExplanation = async (wordObj) => {
+  if (isExplaining || !wordObj) return;
+  setSelectedWord(wordObj);
+  
+  // 1. 優先檢查單字物件中是否已有從 Firestore 同步過來的 analysis (最快、免費用)
   if (wordObj.analysis) {
     setExplanation(wordObj.analysis);
     return;
   }
 
-  // B. 檢查記憶體快取 (防止重複連打)
-  if (analysisCache.has(wordObj.term)) {
-    setExplanation(analysisCache.get(wordObj.term));
+  // 2. 檢查當前 Session 的記憶體快取 (防止短時間重複點擊)
+  const cacheKey = `${wordObj.lang}:${wordObj.term.toLowerCase()}`;
+  if (analysisCache.has(cacheKey)) {
+    setExplanation(analysisCache.get(cacheKey));
     return;
   }
 
-  setIsAnalyzing(true);
+  // 3. 真的沒資料，才動用 Gemini
+  setExplanation(null);
+  setIsExplaining(true);
   try {
-    const prompt = `分析單字 "${wordObj.term}" (語言: ${langMode === 'en' ? '英文' : '日文'})...`; // 原有的 prompt 邏輯
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const prompt = `你是一個語言專家。分析單字 "${wordObj.term}" (${wordObj.lang === 'JP' ? '日文' : '英文'})。回傳格式必須為 JSON 物件，內容須為繁體中文：
+    {
+      "phonetic": "讀法(日文給平假名, 英文給音標)",
+      "pos": "詞性(繁體中文)",
+      "example_original": "單句例句(原文)",
+      "example_zh": "例句翻譯(繁體中文)",
+      "synonyms": ["該語言單字1 (解釋1)", "該語言單字2 (解釋2)"],
+      "tips": "記憶技巧"
+    }`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      body: JSON.stringify({ 
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+      })
     });
 
-    const data = await response.json();
-    const resultText = data.candidates[0].content.parts[0].text;
-    const cleanJson = resultText.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleanJson);
+    const result = await res.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (text) {
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      
+      // ✅ 關鍵步驟：將分析結果存回 Firestore，下次開啟時，wordObj.analysis 就會有值了
+      const wordDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', wordObj.id);
+      await updateDoc(wordDocRef, { analysis: parsed });
 
-    // C. 將分析結果存回 Firestore，下次點開就免費了！
-    const wordDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', wordObj.id);
-    await updateDoc(wordDocRef, {
-      analysis: parsed
-    });
-
-    setExplanation(parsed);
-    analysisCache.set(wordObj.term, parsed);
-  } catch (err) {
-    console.error("AI Analysis Error:", err);
-  } finally {
-    setIsAnalyzing(false);
+      analysisCache.set(cacheKey, parsed);
+      setExplanation(parsed);
+      showToast(`AI 已成功存檔分析結果`, 'info');
+    }
+  } catch (e) { 
+    console.error("AI Analysis Error", e);
+    showToast("AI 獵人暫時失手，請稍後再試", "error");
+  } finally { 
+    setIsExplaining(false); 
   }
 };
-
-  // ========================================================
-  // 🤖 AI 分析
-  // ========================================================
-  const fetchExplanation = async (word) => {
-    if (isExplaining) return;
-    setSelectedWord(word);
-    const cacheKey = `${word.lang}:${word.term.toLowerCase()}`;
-    if (analysisCache.has(cacheKey)) {
-      setExplanation(analysisCache.get(cacheKey));
-      return;
-    }
-    setExplanation(null);
-    setIsExplaining(true);
-    try {
-      const prompt = `你是一個語言專家。分析單字 "${word.term}" (${word.lang === 'JP' ? '日文' : '英文'})。回傳格式必須為 JSON 物件，內容須為繁體中文：
-      {
-        "phonetic": "讀法(日文給平假名, 英文給音標)",
-        "pos": "詞性(繁體中文)",
-        "example_original": "單句例句(原文)",
-        "example_zh": "例句翻譯(繁體中文)",
-        "synonyms": ["該語言單字1 (解釋1)", "該語言單字2 (解釋2)"],
-        "tips": "記憶技巧"
-      }`;
-
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
-      const res = await fetchWithRetry(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
-        })
-      });
-      const result = await res.json();
-      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) {
-        const parsed = JSON.parse(text);
-        analysisCache.set(cacheKey, parsed);
-        setExplanation(parsed);
-      }
-    } catch (e) { console.error("AI Error", e); } finally { setIsExplaining(false); }
-  };
 
   // ========================================================
   // 🏁 測驗邏輯
