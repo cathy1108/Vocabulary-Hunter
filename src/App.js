@@ -353,6 +353,32 @@ const App = () => {
     } catch (e) { console.error("Add Error", e); }
   };
 
+  const addSynonym = async (synonymText) => {
+  // 假設格式是 "單字 (解釋)"，我們只取單字部分
+  const term = synonymText.split('(')[0].trim();
+  const definition = synonymText.includes('(') 
+    ? synonymText.match(/\(([^)]+)\)/)[1] 
+    : "由同義詞快速加入";
+
+  if (words.some(w => w.lang === langMode && w.term.toLowerCase() === term.toLowerCase())) {
+    setDuplicateAlert(true);
+    setTimeout(() => setDuplicateAlert(false), 1500);
+    return;
+  }
+
+  try {
+    const userVocabRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
+    await addDoc(userVocabRef, {
+      term,
+      definition,
+      lang: langMode,
+      createdAt: Date.now(),
+      stats: { mc: { correct: 0, total: 0, archived: false } }
+    });
+    // 加入成功後的小回饋
+  } catch (e) { console.error("Add Synonym Error", e); }
+};
+
   // ========================================================
   // 🤖 AI 分析
   // ========================================================
@@ -775,14 +801,19 @@ const App = () => {
                   </section>
 
                   <section className="space-y-4">
-                    <div className="flex items-center gap-2 font-black text-stone-300 text-[10px] uppercase tracking-widest">
-                      <Layers size={14}/> 同義詞參考
+                    <div className="flex items-center justify-between font-black text-stone-300 text-[10px] uppercase tracking-widest">
+                      <span className="flex items-center gap-2"><Layers size={14}/> 同義詞參考 (點擊快速收錄)</span>
                     </div>
                     <div className="flex flex-wrap gap-2.5">
                       {explanation.synonyms?.map((s, i) => (
-                        <span key={i} className="px-5 py-3 bg-white border border-stone-100 text-stone-600 rounded-2xl text-sm font-black shadow-sm">
+                        <button 
+                          key={i} 
+                          onClick={() => addSynonym(s)}
+                          className="group relative px-5 py-3 bg-white border border-stone-100 text-stone-600 rounded-2xl text-sm font-black shadow-sm hover:border-[#2D4F1E] hover:text-[#2D4F1E] active:scale-90 transition-all flex items-center gap-2"
+                        >
                           {s}
-                        </span>
+                          <Plus size={14} className="text-stone-300 group-hover:text-[#2D4F1E]" />
+                        </button>
                       ))}
                     </div>
                   </section>
