@@ -263,6 +263,7 @@ const App = () => {
   const totalCount = filteredWords.length;
   const masteredCount = filteredWords.filter(w => w.stats?.mc?.archived).length;
   const progressPercent = totalCount > 0 ? (masteredCount / totalCount) * 100 : 0;
+  const unMasteredWords = words.filter(w => w.lang === langMode && !w.stats?.mc?.archived);
 
   
   // ========================================================
