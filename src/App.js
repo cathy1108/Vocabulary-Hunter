@@ -199,6 +199,7 @@ const App = () => {
   const [isExplaining, setIsExplaining] = useState(false);
   const [spellCheck, setSpellCheck] = useState(null);
   const typingTimer = useRef(null);
+  const [toast, setToast] = useState(null); // { msg: string, type: 'success' | 'info' }
 
   const [quizWord, setQuizWord] = useState(null);
   const [options, setOptions] = useState([]);
@@ -215,6 +216,11 @@ const App = () => {
     ut.rate = 0.9;
     window.speechSynthesis.speak(ut);
   };
+
+  const showToast = (msg, type = 'success') => {
+  setToast({ msg, type });
+  setTimeout(() => setToast(null), 2000);
+};
 
   // ========================================================
   // 🔐 認證邏輯
@@ -353,16 +359,16 @@ const App = () => {
     } catch (e) { console.error("Add Error", e); }
   };
 
-  const addSynonym = async (synonymText) => {
-  // 假設格式是 "單字 (解釋)"，我們只取單字部分
+  // 1. 修改同義詞快速加入函式
+const addSynonym = async (synonymText) => {
   const term = synonymText.split('(')[0].trim();
   const definition = synonymText.includes('(') 
     ? synonymText.match(/\(([^)]+)\)/)[1] 
     : "由同義詞快速加入";
 
+  // 檢查是否重複
   if (words.some(w => w.lang === langMode && w.term.toLowerCase() === term.toLowerCase())) {
-    setDuplicateAlert(true);
-    setTimeout(() => setDuplicateAlert(false), 1500);
+    showToast(`「${term}」已經在獵場中了`, 'info');
     return;
   }
 
@@ -375,8 +381,54 @@ const App = () => {
       createdAt: Date.now(),
       stats: { mc: { correct: 0, total: 0, archived: false } }
     });
-    // 加入成功後的小回饋
-  } catch (e) { console.error("Add Synonym Error", e); }
+    // ✅ 這就是你要的具體感受
+    showToast(`已成功捕獲同義詞：${term}`);
+  } catch (e) {
+    showToast("捕獲失敗，請稍後再試", "error");
+  }
+};
+
+// 2. 修改 AI 分析函式：新增快取機制
+const analyzeWord = async (wordObj) => {
+  // A. 如果資料庫已經有分析結果，直接使用，不扣 API 額度
+  if (wordObj.analysis) {
+    setExplanation(wordObj.analysis);
+    return;
+  }
+
+  // B. 檢查記憶體快取 (防止重複連打)
+  if (analysisCache.has(wordObj.term)) {
+    setExplanation(analysisCache.get(wordObj.term));
+    return;
+  }
+
+  setIsAnalyzing(true);
+  try {
+    const prompt = `分析單字 "${wordObj.term}" (語言: ${langMode === 'en' ? '英文' : '日文'})...`; // 原有的 prompt 邏輯
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+
+    const data = await response.json();
+    const resultText = data.candidates[0].content.parts[0].text;
+    const cleanJson = resultText.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleanJson);
+
+    // C. 將分析結果存回 Firestore，下次點開就免費了！
+    const wordDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', wordObj.id);
+    await updateDoc(wordDocRef, {
+      analysis: parsed
+    });
+
+    setExplanation(parsed);
+    analysisCache.set(wordObj.term, parsed);
+  } catch (err) {
+    console.error("AI Analysis Error:", err);
+  } finally {
+    setIsAnalyzing(false);
+  }
 };
 
   // ========================================================
@@ -884,7 +936,16 @@ const App = () => {
           </div>
         </div>
       </div>
-
+      {toast && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-top-4">
+          <div className={`px-6 py-3 rounded-full shadow-2xl border flex items-center gap-2 font-black text-sm ${
+            toast.type === 'info' ? 'bg-stone-800 text-white border-stone-700' : 'bg-[#2D4F1E] text-white border-green-800'
+          }`}>
+            {toast.type === 'info' ? <Search size={16}/> : <CheckCircle2 size={16}/>}
+            {toast.msg}
+          </div>
+        </div>
+      )}
       <style>{`
         @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
         .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
