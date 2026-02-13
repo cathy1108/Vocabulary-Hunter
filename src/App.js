@@ -399,7 +399,7 @@ const App = () => {
   // 🏁 測驗邏輯
   // ========================================================
   const generateQuiz = () => {
-    const pool = words.filter(w => w.lang === langMode);
+    const pool = words.filter(w => w.lang === langMode && (!w.stats?.mc?.archived));
     if (pool.length < 3) return;
     const target = pool[Math.floor(Math.random() * pool.length)];
     const others = pool.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 3).map(w => w.definition);
@@ -487,6 +487,19 @@ const App = () => {
         </div>
         
         <div className="flex items-center gap-2 sm:gap-4">
+          {/* ✅ NEW: Display Current Badge */}
+          {(() => {
+            const masteredTotal = words.filter(w => w.lang === langMode && w.stats?.mc?.archived).length;
+            const badge = getBadgeInfo(masteredTotal);
+            return badge ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-orange-100 to-yellow-100 rounded-full border border-orange-200">
+                <span className="text-lg">{React.cloneElement(badge.icon, { size: 18 })}</span>
+                <span className="text-xs font-black text-orange-700 hidden sm:inline">{badge.label}</span>
+              </div>
+            ) : null;
+          })()}
+          
+          {/* Language Toggle */}
           <div className="bg-stone-100 p-1 rounded-2xl flex border border-stone-200/50">
             {['EN', 'JP'].map(l => (
               <button 
