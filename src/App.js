@@ -633,12 +633,31 @@ const App = () => {
                 </div>
               )}
 
-              {words.filter(w => w.lang === langMode).length < 3 ? (
-                <div className="my-auto text-stone-300 font-bold p-10 text-center space-y-6">
-                  <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto">
-                    <Plus size={32} />
+              {words.filter(w => w.lang === langMode && !w.stats?.mc?.archived).length < 3 ? (
+                <div className="my-auto flex flex-col items-center justify-center space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="relative">
+                    {/* 視覺圖示：使用橘色警告感 */}
+                    <div className="w-24 h-24 bg-orange-50 rounded-[2rem] flex items-center justify-center text-orange-500 transform rotate-12">
+                      <AlertCircle size={48} />
+                    </div>
+                    <Plus size={24} className="absolute -bottom-2 -right-2 text-[#2D4F1E] bg-white rounded-full shadow-md p-1"/>
                   </div>
-                  <p className="text-lg">獵場資源不足<br/><span className="text-sm opacity-60">至少需要 3 個單字來啟動訓練</span></p>
+                  
+                  <div className="space-y-3 text-center">
+                    <h3 className="text-2xl font-black text-stone-800">獵場資源不足</h3>
+                    <p className="text-stone-400 font-bold leading-relaxed px-6">
+                      目前還沒有足夠的「待捕捉」獵物...<br/>
+                      請至少收錄 <span className="text-orange-600">3 個</span> 未精通單字以啟動練習。
+                    </p>
+                  </div>
+              
+                  {/* 引導按鈕：讓使用者直接回去新增 */}
+                  <button 
+                    onClick={() => setActiveTab('list')}
+                    className="px-8 py-4 bg-[#2D4F1E] text-white rounded-2xl font-black shadow-lg shadow-[#2D4F1E]/20 active:scale-95 transition-all flex items-center gap-2"
+                  >
+                    <Compass size={18} /> 前往捕獲新單字
+                  </button>
                 </div>
               ) : !quizWord ? (
                 <div className="my-auto py-20 flex flex-col items-center gap-6">
