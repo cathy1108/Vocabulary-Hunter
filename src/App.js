@@ -177,6 +177,12 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
+  const filteredWords = words.filter(w => w.lang === langMode);
+  const totalCount = filteredWords.length;
+  const masteredCount = filteredWords.filter(w => w.stats?.mc?.archived).length;
+  const progressPercent = totalCount > 0 ? (masteredCount / totalCount) * 100 : 0;
+
+  
   // ========================================================
   // 📊 資料同步 (符合 RULE 1 & 2)
   // ========================================================
@@ -600,8 +606,15 @@ const App = () => {
                     <div className="flex items-center justify-between font-black text-stone-300 text-[10px] uppercase tracking-widest">
                       <span className="flex items-center gap-2"><PlayCircle size={14}/> 實戰例句</span>
                     </div>
-                    <div className="bg-stone-50 p-6 rounded-[2rem] border-l-[6px] border-[#2D4F1E] shadow-sm">
-                      <p className="font-black text-stone-800 mb-3 leading-relaxed text-xl italic">
+                    <div className="bg-stone-50 p-6 rounded-[2rem] border-l-[6px] border-[#2D4F1E] shadow-sm group relative">
+                      <button 
+                        onClick={() => speak(explanation.example_original, selectedWord.lang)}
+                        className="absolute right-4 top-4 p-3 bg-white text-[#2D4F1E] rounded-xl shadow-sm border border-stone-100 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                      >
+                        <Volume2 size={16}/>
+                        <span className="text-[10px] font-black">播放例句</span>
+                      </button>
+                      <p className="font-black text-stone-800 mb-3 leading-relaxed text-xl italic pr-10">
                         "{explanation.example_original}"
                       </p>
                       <p className="text-stone-500 font-bold text-base">{explanation.example_zh}</p>
@@ -640,19 +653,27 @@ const App = () => {
       )}
 
       <div className="fixed bottom-6 left-6 right-6 z-40">
-        <div className="max-w-md mx-auto bg-white/70 backdrop-blur-2xl border border-stone-100 p-5 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] flex items-center gap-5">
-          <div className="bg-[#2D4F1E]/5 p-3 rounded-2xl">
-              <Trophy size={20} className="text-[#2D4F1E]" />
+        <div className="max-w-md mx-auto bg-white/70 backdrop-blur-2xl border border-stone-100 p-6 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] flex items-center gap-5">
+          <div className="bg-[#2D4F1E]/5 p-3.5 rounded-2xl text-[#2D4F1E]">
+            {progressPercent === 100 ? <CheckCircle2 size={24} className="text-green-600 animate-bounce" /> : <Trophy size={24} />}
           </div>
-          <div className="flex-1 flex flex-col gap-2">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">熟練度</span>
-              <span className="font-black text-sm text-[#2D4F1E]">{Math.round(progress)}%</span>
+          <div className="flex-1 flex flex-col gap-2.5">
+            <div className="flex justify-between items-end">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] mb-0.5">熟練度</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-black text-xl text-[#2D4F1E]">{masteredCount}</span>
+                  <span className="text-stone-300 text-xs font-bold">/ {totalCount} 單字</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="font-black text-lg text-[#2D4F1E]">{Math.round(progressPercent)}%</span>
+              </div>
             </div>
-            <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden shadow-inner">
+            <div className="h-3 bg-stone-100 rounded-full overflow-hidden shadow-inner border border-stone-50">
               <div 
-                className="h-full bg-gradient-to-r from-[#2D4F1E] to-[#4c8133] transition-all duration-1000 ease-out" 
-                style={{ width: `${progress}%` }}
+                className={`h-full transition-all duration-1000 ease-out ${progressPercent === 100 ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-[#2D4F1E] to-[#4c8133]'}`} 
+                style={{ width: `${progressPercent}%` }}
               ></div>
             </div>
           </div>
