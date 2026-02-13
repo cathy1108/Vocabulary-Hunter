@@ -41,7 +41,15 @@ import {
   AlertCircle,
   UserCircle,
   Award,
+  Medal,
   Flame,
+  Crown,
+  Zap,
+  Star,
+  Ghost,
+  Eye,
+  Gem,
+  ShieldCheck,
   Smartphone
 } from 'lucide-react';
 
@@ -78,6 +86,77 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'multilang-vocab-master';
+
+// ========================================================
+// 🎉 彩帶動畫元件
+// ========================================================
+const Confetti = () => {
+  const pieces = useMemo(() => {
+    return Array.from({ length: 80 }).map((_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      delay: Math.random() * 2,
+      duration: 2.5 + Math.random() * 2.5,
+      color: ['#FFD700', '#FF4500', '#FF1493', '#00BFFF', '#32CD32', '#9370DB', '#FFFFFF'][Math.floor(Math.random() * 7)],
+      size: 6 + Math.random() * 12,
+      rotation: Math.random() * 360
+    }));
+  }, []);
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[120] overflow-hidden">
+      {pieces.map(p => (
+        <div
+          key={p.id}
+          className="absolute top-[-20px]"
+          style={{
+            left: `${p.x}%`,
+            backgroundColor: p.color,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            opacity: 0.9,
+            borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+            transform: `rotate(${p.rotation}deg)`,
+            animation: `confetti-fall ${p.duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${p.delay}s infinite`
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+// ========================================================
+// 🏆 勳章門檻配置 (1000 字後每 200 一個標籤，及 3K, 5K, 10K 特殊勳章)
+// ========================================================
+const getBadgeInfo = (count) => {
+  // 巔峰里程碑
+  if (count >= 10000) return { label: "真．全知之眼", icon: <Eye />, color: "from-stone-900 via-yellow-600 to-black", threshold: 10000 };
+  if (count >= 5000) return { label: "博學聖賢", icon: <Ghost />, color: "from-indigo-900 to-blue-800", threshold: 5000 };
+  if (count >= 3000) return { label: "語文宗師", icon: <Gem />, color: "from-fuchsia-600 to-purple-900", threshold: 3000 };
+  
+  // 1000 字以後的動態門檻 (每 200 一個)
+  if (count >= 1000) {
+    const step = Math.floor(count / 200) * 200;
+    return { label: `${step} 斬傳說`, icon: <ShieldCheck />, color: "from-yellow-500 to-amber-700", threshold: step };
+  }
+
+  // 1000 字以前的舊有門檻
+  if (count >= 200) {
+    const step = Math.floor(count / 50) * 50;
+    return { label: `${step} 斬獵人`, icon: <Zap />, color: "from-purple-500 to-indigo-600", threshold: step };
+  }
+  if (count >= 150) return { label: "資深獵人", icon: <Award />, color: "from-blue-400 to-blue-600", threshold: 150 };
+  if (count >= 100) return { label: "百單大師", icon: <Star />, color: "from-cyan-400 to-blue-500", threshold: 100 };
+  if (count >= 80) return { label: "卓越獵手", icon: <Medal />, color: "from-emerald-400 to-teal-600", threshold: 80 };
+  if (count >= 50) return { label: "精英學徒", icon: <Target />, color: "from-green-400 to-emerald-500", threshold: 50 };
+  if (count >= 30) return { label: "進階行者", icon: <Flame />, color: "from-orange-400 to-red-500", threshold: 30 };
+  if (count >= 10) return { label: "初試啼聲", icon: <Sparkles />, color: "from-amber-400 to-orange-400", threshold: 10 };
+  
+  // 測試門檻
+  if (count >= 1) return { label: "見習獵人", icon: <Sparkles />, color: "from-stone-400 to-stone-600", threshold: 1 };
+  
+  return null;
+};
 
 // ========================================================
 // 🧠 輔助函式
@@ -123,6 +202,8 @@ const App = () => {
   const [quizWord, setQuizWord] = useState(null);
   const [options, setOptions] = useState([]);
   const [quizFeedback, setQuizFeedback] = useState(null); 
+  const [showBadge, setShowBadge] = useState(null);
+  const lastBadgedCount = useRef(-1); 
   const isTransitioning = useRef(false);
 
   const speak = (text, lang) => {
@@ -186,16 +267,29 @@ const App = () => {
   // ========================================================
   // 📊 資料同步 (符合 RULE 1 & 2)
   // ========================================================
-  useEffect(() => {
+   useEffect(() => {
     if (!user) return;
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
     const unsubscribe = onSnapshot(query(wordsRef), 
       (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // 在記憶體中排序以符合 RULE 2
-        setWords(data.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
-      }, 
-      (error) => console.warn("Firestore Error:", error.message)
+        const sorted = data.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setWords(sorted);
+
+        // 勳章檢測邏輯
+        const masteredTotal = data.filter(w => w.stats?.mc?.archived).length;
+        const badge = getBadgeInfo(masteredTotal);
+        
+        if (lastBadgedCount.current === -1) {
+            lastBadgedCount.current = badge?.threshold || 0;
+            return;
+        }
+
+        if (badge && badge.threshold > lastBadgedCount.current) {
+          setShowBadge(badge);
+          lastBadgedCount.current = badge.threshold;
+        }
+      }
     );
     return () => unsubscribe();
   }, [user]);
@@ -562,6 +656,35 @@ const App = () => {
         )}
       </main>
 
+{/* 🏅 勳章解鎖彈窗 (支援巔峰勳章) */}
+      {showBadge && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-500">
+          <div className="absolute inset-0 bg-stone-900/90 backdrop-blur-xl" onClick={() => setShowBadge(null)}></div>
+          <Confetti />
+          <div className={`relative w-full max-w-sm bg-gradient-to-br ${showBadge.color} p-1 rounded-[4rem] shadow-2xl animate-in zoom-in spin-in-1 duration-700 z-[130]`}>
+            <div className="bg-white rounded-[3.8rem] p-10 text-center space-y-8 overflow-hidden relative">
+              {/* 巔峰特效背景 */}
+              {showBadge.threshold >= 3000 && (
+                <div className={`absolute inset-0 opacity-10 bg-gradient-to-tr ${showBadge.color} animate-pulse`}></div>
+              )}
+              <div className={`w-28 h-28 mx-auto rounded-[2.5rem] flex items-center justify-center bg-gradient-to-br ${showBadge.color} shadow-2xl text-white animate-bounce-slow relative`}>
+                <div className="absolute inset-0 bg-white/20 rounded-[2.5rem] animate-ping opacity-30"></div>
+                {React.cloneElement(showBadge.icon, { size: 56, strokeWidth: 2.5 })}
+              </div>
+              <div className="space-y-3 relative z-10">
+                <p className="text-stone-400 font-black tracking-[0.3em] text-[10px] uppercase">
+                  {showBadge.threshold >= 3000 ? "Legendary Achievement" : "Achievement Unlocked"}
+                </p>
+                <h2 className="text-4xl font-black text-stone-800 tracking-tight">{showBadge.label}</h2>
+                <div className="bg-stone-50 py-2 px-4 rounded-full inline-block">
+                  <p className="text-stone-500 font-black text-xs">成功熟記了 {showBadge.threshold} 個單字！</p>
+                </div>
+              </div>
+              <button onClick={() => setShowBadge(null)} className={`relative z-10 w-full py-5 rounded-[1.8rem] bg-gradient-to-r ${showBadge.color} text-white font-black shadow-lg active:scale-95 transition-all text-lg`}>收下榮耀</button>
+            </div>
+          </div>
+        </div>
+      )}
       {selectedWord && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" onClick={() => setSelectedWord(null)}></div>
