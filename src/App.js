@@ -226,6 +226,15 @@ const App = () => {
   // 🔐 認證邏輯
   // ========================================================
   useEffect(() => {
+      // 修改分頁標題
+    document.title = "VocabHunter | 智慧單字獵場";
+    
+    // 動態修改 Favicon (使用 Emoji 作為臨時 Logo)
+    const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+    link.rel = 'icon';
+    // 這裡使用 SVG Data URI，將 🧭 羅盤作為圖示
+    link.href = `data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>`;
+    document.getElementsByTagName('head')[0].appendChild(link);
     const initAuth = async () => {
       try {
         // 1. 強制設定 Persistence 以確保重新導向後能保留登入狀態
