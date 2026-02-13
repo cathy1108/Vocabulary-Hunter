@@ -447,7 +447,6 @@ const fetchExplanation = async (wordObj) => {
 
       analysisCache.set(cacheKey, parsed);
       setExplanation(parsed);
-      showToast(`AI 已成功存檔分析結果`, 'info');
     }
   } catch (e) { 
     console.error("AI Analysis Error", e);
