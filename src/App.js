@@ -791,7 +791,7 @@ const App = () => {
                         className="absolute right-4 top-4 p-3 bg-white text-[#2D4F1E] rounded-xl shadow-sm border border-stone-100 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
                       >
                         <Volume2 size={16}/>
-                        <span className="text-[10px] font-black">播放例句</span>
+                        <span className="text-[10px] font-black"></span>
                       </button>
                       <p className="font-black text-stone-800 mb-3 leading-relaxed text-xl italic pr-10">
                         "{explanation.example_original}"
