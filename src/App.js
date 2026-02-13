@@ -261,9 +261,9 @@ const App = () => {
 
   const filteredWords = words.filter(w => w.lang === langMode);
   const totalCount = filteredWords.length;
+  const unMasteredWords = words.filter(w => w.lang === langMode && !w.stats?.mc?.archived);
   const masteredCount = filteredWords.filter(w => w.stats?.mc?.archived).length;
   const progressPercent = totalCount > 0 ? (masteredCount / totalCount) * 100 : 0;
-  const unMasteredWords = words.filter(w => w.lang === langMode && !w.stats?.mc?.archived);
 
   
   // ========================================================
@@ -633,74 +633,39 @@ const App = () => {
                 </div>
               )}
 
-                             {(() => {
-                 const unMasteredWords = words.filter(w => w.lang === langMode && !w.stats?.mc?.archived);
-                 const totalWords = words.filter(w => w.lang === langMode);
-                 
-                 // 1️⃣ 沒有足夠的單字開始
-                 if (totalWords.length < 3) {
-                   return (
-                     <div className="my-auto text-stone-300 font-bold p-10 text-center space-y-6">
-                       <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto">
-                         <Plus size={32} />
-                       </div>
-                       <p className="text-lg">獵場資源不足<br/><span className="text-sm opacity-60">至少需要 3 個單字來啟動訓練</span></p>
-                     </div>
-                   );
-                 }
-                 
-                 // 2️⃣ ✅ 所有單字都已掌握！
-                 if (unMasteredWords.length === 0) {
-                   return (
-                     <div className="my-auto py-20 flex flex-col items-center gap-6 text-center">
-                       <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-lg">
-                         <Trophy size={48} className="text-white animate-bounce" />
-                       </div>
-                       <div>
-                         <h2 className="text-3xl font-black text-green-600 mb-2">🎉 完美達成！</h2>
-                         <p className="text-stone-600 font-bold mb-4">你已掌握所有 {totalWords.length} 個單字！</p>
-                         <p className="text-stone-400 text-sm">繼續加入新單字來挑戰自己</p>
-                       </div>
-                     </div>
-                   );
-                 }
-                 
-                 // 3️⃣ 載入中...
-                 if (!quizWord) {
-                   return (
-                     <div className="my-auto py-20 flex flex-col items-center gap-6">
-                       <Loader2 className="animate-spin text-[#2D4F1E]/20 w-16 h-16" />
-                       <p className="font-black text-stone-300 tracking-widest text-xs uppercase">Tracking Target...</p>
-                     </div>
-                   );
-                 }
-                 
-                 // 4️⃣ 正常問題
-                 return (
-                   <>
-                     <div className="mb-10 pt-6">
-                       <button onClick={() => speak(quizWord.term, quizWord.lang)} className="w-24 h-24 bg-[#2D4F1E] rounded-[2.5rem] text-white shadow-2xl flex items-center justify-center mx-auto mb-8 active:scale-90 transition-all group">
-                         <Volume2 size={48} className="group-hover:rotate-6 transition-transform"/>
-                       </button>
-                       <h2 className="text-5xl font-black text-stone-800 tracking-tight">{quizWord.term}</h2>
-                       <p className="text-stone-400 font-bold mt-2">
-                         {unMasteredWords.length} / {totalWords.length} 單字待掌握
-                       </p>
-                     </div>
-                     <div className="grid gap-4">
-                       {options.map((opt, i) => (
-                         <button 
-                           key={i} 
-                           onClick={() => handleQuizAnswer(opt)} 
-                           className="py-5 px-8 bg-stone-50 border-2 border-stone-50 rounded-[1.8rem] font-black text-stone-700 hover:bg-white hover:border-[#2D4F1E]/20 active:bg-[#2D4F1E] active:text-white transition-all text-lg shadow-sm"
-                         >
-                           {opt}
-                         </button>
-                       ))}
-                     </div>
-                   </>
-                 );
-               })()}
+              {words.filter(w => w.lang === langMode).length < 3 ? (
+                <div className="my-auto text-stone-300 font-bold p-10 text-center space-y-6">
+                  <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto">
+                    <Plus size={32} />
+                  </div>
+                  <p className="text-lg">獵場資源不足<br/><span className="text-sm opacity-60">至少需要 3 個單字來啟動訓練</span></p>
+                </div>
+              ) : !quizWord ? (
+                <div className="my-auto py-20 flex flex-col items-center gap-6">
+                  <Loader2 className="animate-spin text-[#2D4F1E]/20 w-16 h-16" />
+                  <p className="font-black text-stone-300 tracking-widest text-xs uppercase">Tracking Target...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-10 pt-6">
+                    <button onClick={() => speak(quizWord.term, quizWord.lang)} className="w-24 h-24 bg-[#2D4F1E] rounded-[2.5rem] text-white shadow-2xl flex items-center justify-center mx-auto mb-8 active:scale-90 transition-all group">
+                      <Volume2 size={48} className="group-hover:rotate-6 transition-transform"/>
+                    </button>
+                    <h2 className="text-5xl font-black text-stone-800 tracking-tight">{quizWord.term}</h2>
+                  </div>
+                  <div className="grid gap-4">
+                    {options.map((opt, i) => (
+                      <button 
+                        key={i} 
+                        onClick={() => handleQuizAnswer(opt)} 
+                        className="py-5 px-8 bg-stone-50 border-2 border-stone-50 rounded-[1.8rem] font-black text-stone-700 hover:bg-white hover:border-[#2D4F1E]/20 active:bg-[#2D4F1E] active:text-white transition-all text-lg shadow-sm"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -843,32 +808,11 @@ const App = () => {
                 <span className="font-black text-lg text-[#2D4F1E]">{Math.round(progressPercent)}%</span>
               </div>
             </div>
-                        <div className="h-3 bg-stone-100 rounded-full overflow-hidden shadow-inner border border-stone-50">
+            <div className="h-3 bg-stone-100 rounded-full overflow-hidden shadow-inner border border-stone-50">
               <div 
                 className={`h-full transition-all duration-1000 ease-out ${progressPercent === 100 ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-[#2D4F1E] to-[#4c8133]'}`} 
                 style={{ width: `${progressPercent}%` }}
               ></div>
-            </div>
-            
-            {/* ✅ NEW: Display Current Achievement Badge */}
-            {(() => {
-              const masteredTotal = words.filter(w => w.lang === langMode && w.stats?.mc?.archived).length;
-              const badge = getBadgeInfo(masteredTotal);
-              return badge ? (
-                <div className="mt-4 pt-4 border-t border-stone-200 text-center">
-                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">當前成就</p>
-                  <div className="flex items-center justify-center gap-2">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br ${badge.color} text-white`}>
-                      {React.cloneElement(badge.icon, { size: 24 })}
-                    </div>
-                    <div className="text-left">
-                      <p className="font-black text-stone-800">{badge.label}</p>
-                      <p className="text-[10px] text-stone-400">{badge.threshold} 單字已掌握</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null;
-            })()}
             </div>
           </div>
         </div>
