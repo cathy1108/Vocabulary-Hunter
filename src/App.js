@@ -471,7 +471,7 @@ const fetchExplanation = async (wordObj) => {
     const pool = words.filter(w => w.lang === langMode && (!w.stats?.mc?.archived));
     if (pool.length < 3) return;
     const target = pool[Math.floor(Math.random() * pool.length)];
-    const others = pool.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, ㄉ).map(w => w.definition);
+    const others = pool.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 2).map(w => w.definition);
     setQuizWord(target);
     const quizOptions = [...others, target.definition, "我不確定"].sort(() => 0.5 - Math.random());
     setOptions(quizOptions);
