@@ -673,7 +673,7 @@ const fetchExplanation = async (wordObj) => {
                 <input 
                   type="text" 
                   placeholder={langMode === 'JP' ? "輸入日文單字..." : "輸入英文單字..."} 
-                  className="w-full px-6 py-5 bg-stone-50 border-2 border-transparent rounded-[1.8rem] focus:border-[#2D4F1E]/10 focus:bg-white outline-none font-black text-2xl transition-all" 
+                  className="w-full px-6 py-5 bg-stone-50 border-2 border-transparent rounded-[1.8rem] focus:border-[#2D4F1E]/10 focus:bg-white outline-none font-black text-xl transition-all" 
                   value={newWord.term} 
                   onChange={(e) => handleInputChange(e.target.value)} 
                 />
@@ -700,11 +700,11 @@ const fetchExplanation = async (wordObj) => {
                   <input 
                     type="text" 
                     placeholder="翻譯結果..." 
-                    className="w-full px-6 py-5 bg-stone-50 border-2 border-transparent rounded-[1.8rem] focus:border-[#2D4F1E]/10 focus:bg-white outline-none font-bold text-stone-600 text-xl transition-all" 
+                    className="w-full px-6 py-5 bg-stone-50 border-2 border-transparent rounded-[1.8rem] focus:border-[#2D4F1E]/10 focus:bg-white outline-none font-bold text-stone-600 text-base transition-all" 
                     value={newWord.definition} 
                     onChange={(e) => setNewWord({...newWord, definition: e.target.value})} 
                   />
-                  <button type="submit" className="w-full py-5 bg-[#2D4F1E] text-white rounded-[1.8rem] font-black text-lg flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg shadow-[#2D4F1E]/10">
+                  <button type="submit" className="w-full py-5 bg-[#2D4F1E] text-white rounded-[1.8rem] font-black text-base flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg shadow-[#2D4F1E]/10">
                     <Plus size={24}/> 收錄單字
                   </button>
                 </div>
@@ -720,7 +720,7 @@ const fetchExplanation = async (wordObj) => {
                 >
                   <div className="flex-1 pr-4">
                     <div className="flex items-center gap-3">
-                      <span className="font-black text-2xl text-stone-800">{word.term}</span>
+                      <span className="font-black text-1g text-stone-800">{word.term}</span>
                       {word.stats?.mc?.archived && (
                         <div className="bg-orange-50 text-orange-600 px-2 py-1 rounded-lg flex items-center gap-1 animate-pulse">
                           <Award size={14} className="fill-orange-500"/>
@@ -728,7 +728,7 @@ const fetchExplanation = async (wordObj) => {
                         </div>
                       )}
                     </div>
-                    <div className="text-stone-400 font-bold mt-1 line-clamp-1">{word.definition}</div>
+                    <div className="text-stone-400 text-sm font-bold mt-1 line-clamp-1">{word.definition}</div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={(e) => { e.stopPropagation(); speak(word.term, word.lang); }} className="w-12 h-12 flex items-center justify-center text-stone-200 hover:text-[#2D4F1E] transition-all">
