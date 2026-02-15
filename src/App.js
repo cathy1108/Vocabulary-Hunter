@@ -471,9 +471,10 @@ const fetchExplanation = async (wordObj) => {
     const pool = words.filter(w => w.lang === langMode && (!w.stats?.mc?.archived));
     if (pool.length < 3) return;
     const target = pool[Math.floor(Math.random() * pool.length)];
-    const others = pool.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 3).map(w => w.definition);
+    const others = pool.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, ㄉ).map(w => w.definition);
     setQuizWord(target);
-    setOptions([...others, target.definition].sort(() => 0.5 - Math.random()));
+    const quizOptions = [...others, target.definition, "我不確定"].sort(() => 0.5 - Math.random());
+    setOptions(quizOptions);
     isTransitioning.current = false;
   };
 
@@ -482,18 +483,53 @@ const fetchExplanation = async (wordObj) => {
   const handleQuizAnswer = async (ans) => {
     if (quizFeedback || !quizWord || isTransitioning.current || !user) return;
     isTransitioning.current = true;
+  
+    const isUncertain = ans === "我不確定";
     const isCorrect = ans === quizWord.definition;
-    setQuizFeedback({ status: isCorrect ? 'correct' : 'wrong', message: isCorrect ? '🎯 完美擊中！' : `🍃 答案是：${quizWord.definition}` });
+  
+    // 設定回饋訊息
+    if (isCorrect) {
+      setQuizFeedback({ 
+        status: 'correct', 
+        message: '🎯 完美擊中！' 
+      });
+    } else if (isUncertain) {
+      setQuizFeedback({ 
+        status: 'wrong', 
+        message: `💡 沒關係，這隻獵物是：${quizWord.definition}` 
+      });
+    } else {
+      setQuizFeedback({ 
+        status: 'wrong', 
+        message: `🍃 失手了！答案是：${quizWord.definition}` 
+      });
+    }
     
+    // 只有在完全正確時才更新資料庫中的熟練度
     if (isCorrect) {
       const stats = quizWord.stats?.mc || { correct: 0, total: 0, archived: false };
       const newCorrect = stats.correct + 1;
       const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', quizWord.id);
       await updateDoc(docRef, { 
-        "stats.mc": { total: stats.total + 1, correct: newCorrect, archived: newCorrect >= 3 } 
+        "stats.mc": { 
+          total: stats.total + 1, 
+          correct: newCorrect, 
+          archived: newCorrect >= 3 
+        } 
+      });
+    } else {
+      // 如果選擇「我不確定」或「答錯」，可以選擇增加 total 次數但不增加 correct，或是乾脆不更新
+      const stats = quizWord.stats?.mc || { correct: 0, total: 0, archived: false };
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', quizWord.id);
+      await updateDoc(docRef, { 
+        "stats.mc": { ...stats, total: stats.total + 1 } 
       });
     }
-    setTimeout(() => { setQuizFeedback(null); generateQuiz(); }, 1600);
+  
+    setTimeout(() => { 
+      setQuizFeedback(null); 
+      generateQuiz(); 
+    }, 1600);
   };
 
   const progress = words.filter(w => w.lang === langMode).length > 0 
@@ -755,10 +791,14 @@ const fetchExplanation = async (wordObj) => {
                   <div className="grid gap-4">
                     {options.map((opt, i) => (
                       <button 
-                        key={i} 
-                        onClick={() => handleQuizAnswer(opt)} 
-                        className="py-5 px-8 bg-stone-50 border-2 border-stone-50 rounded-[1.8rem] font-black text-stone-700 hover:bg-white hover:border-[#2D4F1E]/20 active:bg-[#2D4F1E] active:text-white transition-all text-lg shadow-sm"
-                      >
+                          key={i} 
+                          onClick={() => handleQuizAnswer(opt)} 
+                          className={`py-5 px-8 rounded-[1.8rem] font-black text-lg shadow-sm transition-all border-2 
+                            ${opt === "我不確定" 
+                              ? "bg-stone-100 border-transparent text-stone-400 hover:bg-stone-200" 
+                              : "bg-stone-50 border-stone-50 text-stone-700 hover:bg-white hover:border-[#2D4F1E]/20 active:bg-[#2D4F1E] active:text-white"
+                            }`}
+                        >
                         {opt}
                       </button>
                     ))}
