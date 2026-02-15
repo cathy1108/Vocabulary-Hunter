@@ -650,19 +650,24 @@ const fetchExplanation = async (wordObj) => {
           <div className="flex items-center gap-2">
             <div className="flex flex-col items-end hidden md:flex">
               <span className="text-[10px] font-black text-stone-400 uppercase tracking-tighter">Hunter</span>
-              <span className="text-xs font-bold text-stone-700 truncate max-w-[80px]">{user.displayName || (user.isAnonymous ? '匿名獵人' : 'User')}</span>
+              <span className="text-xs font-bold text-stone-700 truncate max-w-[80px]">
+                {user.displayName || (user.isAnonymous ? '匿名獵人' : 'User')}
+              </span>
             </div>
             {user.photoURL ? (
-              <img src={user.photoURL} alt="User" className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
+              <img src={user.photoURL} alt="User" className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white shadow-sm" />
             ) : (
-              <div className="w-10 h-10 bg-stone-200 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                <UserCircle size={24} className="text-stone-400" />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-stone-200 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                <UserCircle size={20} className="text-stone-400" />
               </div>
             )}
-            <button onClick={() => signOut(auth)} className="text-stone-300 hover:text-red-500 p-2 transition-all">
-              <LogOut size={20}/>
-            </button>
-          </div>
+            <button 
+                onClick={() => signOut(auth)} 
+                className="text-stone-300 hover:text-red-500 p-2 transition-all shrink-0"
+              >
+                <LogOut size={20}/>
+              </button>
+            </div>
         </div>
       </header>
 
