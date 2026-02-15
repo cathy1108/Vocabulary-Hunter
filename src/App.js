@@ -226,14 +226,21 @@ const App = () => {
   // 🔐 認證邏輯
   // ========================================================
   useEffect(() => {
-      // 修改分頁標題
-    document.title = "VocabHunter | 智慧單字獵場";
+      document.title = "VocabHunter | 智慧單字獵場";
+      const logoUrl = "/logo.png"; // 確保你的檔案放在 public/logo.png
+  
+      // 1. 處理標準 Favicon (Chrome, Firefox, etc.)
+      const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+      link.rel = 'icon';
+      link.href = logoUrl; 
+      document.getElementsByTagName('head')[0].appendChild(link);
+  
+      // 2. 處理 Apple Touch Icon (Safari 存到主畫面專用)
+      const appleLink = document.querySelector("link[rel='apple-touch-icon']") || document.createElement('link');
+      appleLink.rel = 'apple-touch-icon';
+      appleLink.href = logoUrl;
+      document.getElementsByTagName('head')[0].appendChild(appleLink);
     
-    const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
-    link.rel = 'icon';
-    // 修改這裡：直接指向 public 下的 logo.png
-    link.href = "/logo.png"; 
-    document.getElementsByTagName('head')[0].appendChild(link);
     const initAuth = async () => {
       try {
         // 1. 強制設定 Persistence 以確保重新導向後能保留登入狀態
@@ -552,8 +559,12 @@ const fetchExplanation = async (wordObj) => {
       <div className="min-h-screen bg-[#FDFCF8] flex items-center justify-center p-6 relative overflow-hidden">
         <div className="absolute top-[-5%] right-[-5%] w-64 h-64 bg-[#2D4F1E]/5 rounded-full blur-3xl"></div>
         <div className="w-full max-w-sm bg-white p-10 rounded-[3.5rem] shadow-[0_20px_50px_rgba(45,79,30,0.1)] text-center border border-stone-100 z-10">
-          <div className="w-24 h-24 bg-[#2D4F1E] rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl transform -rotate-3">
-            <Compass className="text-white w-12 h-12" />
+          <div className="w-28 h-28 bg-[#2D4F1E] rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl transform -rotate-3 hover:rotate-0 transition-transform duration-500 overflow-hidden p-2">
+            <img 
+              src="/logo.png" 
+              alt="VocabHunter Logo" 
+              className="w-full h-full object-contain scale-110" 
+            />
           </div>
           <h1 className="text-4xl font-black text-stone-800 mb-3 tracking-tight">VocabHunter</h1>
           <p className="text-stone-400 font-bold mb-10 leading-relaxed px-4">捕捉單字，建立屬於你的<br/>智慧獵場</p>
