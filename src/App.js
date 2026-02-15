@@ -766,8 +766,8 @@ const fetchExplanation = async (wordObj) => {
                     <div className="space-y-3 text-center">
                       <h3 className="text-2xl font-black text-stone-800">獵場資源不足</h3>
                       <p className="text-stone-400 font-bold leading-relaxed px-6">
-                        目前還沒有足夠的「待捕捉」獵物...<br/>
-                        請至少收錄 <span className="text-orange-600">3 個</span> 未精通單字以啟動練習。
+                        目前沒有足夠的「待捕捉」獵物...<br/>
+                        請至少收錄 <span className="text-orange-600">3 個</span> 未精通單字來啟動。
                       </p>
                     </div>
                     <button 
