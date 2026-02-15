@@ -473,7 +473,8 @@ const fetchExplanation = async (wordObj) => {
     const target = pool[Math.floor(Math.random() * pool.length)];
     const others = pool.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 2).map(w => w.definition);
     setQuizWord(target);
-    const quizOptions = [...others, target.definition, "我不確定"].sort(() => 0.5 - Math.random());
+    const shuffledDistractors = [target.definition, ...others].sort(() => 0.5 - Math.random());
+    const quizOptions = [...shuffledDistractors, "我不確定"];
     setOptions(quizOptions);
     isTransitioning.current = false;
   };
