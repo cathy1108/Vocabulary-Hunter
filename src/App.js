@@ -233,7 +233,7 @@ const App = () => {
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.rel = 'icon';
     // 這裡使用 SVG Data URI，將 🧭 羅盤作為圖示
-    link.href = '/logo.png';
+    link.href = 'logo.png';
     document.getElementsByTagName('head')[0].appendChild(link);
     const initAuth = async () => {
       try {
@@ -554,7 +554,7 @@ const fetchExplanation = async (wordObj) => {
           <div className="relative">
             <div className="bg-[#2D4F1E] p-2.5 rounded-2xl shadow-lg shadow-[#2D4F1E]/20 rotate-[-5deg] group-hover:rotate-0 transition-transform duration-300">
               <img 
-                src="/logo.jpg" 
+                src="logo.png" 
                 alt="VocabHunter Logo" 
                 className="w-full h-full object-cover"
               />
