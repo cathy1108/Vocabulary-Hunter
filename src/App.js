@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import logoImg from './logo.png';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -233,7 +234,7 @@ const App = () => {
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.rel = 'icon';
     // 這裡使用 SVG Data URI，將 🧭 羅盤作為圖示
-    link.href = './logo.png';
+    link.href = logoImg; 
     document.getElementsByTagName('head')[0].appendChild(link);
     const initAuth = async () => {
       try {
@@ -552,10 +553,11 @@ const fetchExplanation = async (wordObj) => {
         <div className="flex items-center gap-3 group cursor-pointer">
           {/* 標誌圖示：結合羅盤與獵人綠 */}
           <div className="relative">
-            <div className="bg-[#2D4F1E] p-2.5 rounded-2xl shadow-lg shadow-[#2D4F1E]/20 rotate-[-5deg] group-hover:rotate-0 transition-transform duration-300">
+            <div className="bg-[#2D4F1E] p-1 rounded-2xl shadow-lg rotate-[-5deg] group-hover:rotate-0 transition-transform duration-300 w-12 h-12 flex items-center justify-center overflow-hidden">
               <img 
-                src="./logo.png" 
-                className="w-full h-full object-cover"
+                src={logoImg}  // 使用剛才 import 的變數
+                alt="VocabHunter Logo" 
+                className="w-full h-full object-contain scale-125" // object-contain 確保去背圖不變形
               />
             </div>
           </div>
