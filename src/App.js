@@ -233,7 +233,7 @@ const App = () => {
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.rel = 'icon';
     // 這裡使用 SVG Data URI，將 🧭 羅盤作為圖示
-    link.href = `data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>`;
+    link.href = '/logo.png';
     document.getElementsByTagName('head')[0].appendChild(link);
     const initAuth = async () => {
       try {
@@ -553,10 +553,12 @@ const fetchExplanation = async (wordObj) => {
           {/* 標誌圖示：結合羅盤與獵人綠 */}
           <div className="relative">
             <div className="bg-[#2D4F1E] p-2.5 rounded-2xl shadow-lg shadow-[#2D4F1E]/20 rotate-[-5deg] group-hover:rotate-0 transition-transform duration-300">
-              <Compass size={24} className="text-white"/>
+              <img 
+                src="/logo.jpg" 
+                alt="VocabHunter Logo" 
+                className="w-full h-full object-cover"
+              />
             </div>
-            {/* 裝飾性的小圓點 */}
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full border-2 border-white"></div>
           </div>
           
           {/* 品牌文字：雙色設計 */}
