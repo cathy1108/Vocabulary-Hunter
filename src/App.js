@@ -189,7 +189,13 @@ const App = () => {
   const [words, setWords] = useState([]);
   const [errorMessage, setErrorMessage] = useState(""); 
   const [activeTab, setActiveTab] = useState('list');
-  const [langMode, setLangMode] = useState('EN'); 
+  const [langMode, setLangMode] = useState(() => {
+    // 優先從本地讀取，讓用戶一進來就看到他熟悉的語言，不會閃爍
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('voca_lang_pref') || 'EN';
+    }
+    return 'EN';
+  });
   const [newWord, setNewWord] = useState({ term: '', definition: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -292,30 +298,60 @@ const App = () => {
   // ========================================================
    useEffect(() => {
     if (!user) return;
+  
+    // 1. 監聽單字清單 (你原本的邏輯)
     const wordsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
-    const unsubscribe = onSnapshot(query(wordsRef), 
-      (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const sorted = data.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
-        setWords(sorted);
-
-        // 勳章檢測邏輯
-        const masteredTotal = data.filter(w => w.stats?.mc?.archived).length;
-        const badge = getBadgeInfo(masteredTotal);
-        
-        if (lastBadgedCount.current === -1) {
-            lastBadgedCount.current = badge?.threshold || 0;
-            return;
-        }
-
-        if (badge && badge.threshold > lastBadgedCount.current) {
-          setShowBadge(badge);
-          lastBadgedCount.current = badge.threshold;
+    const unsubscribeWords = onSnapshot(query(wordsRef), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const sorted = data.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setWords(sorted);
+  
+      const masteredTotal = data.filter(w => w.stats?.mc?.archived).length;
+      const badge = getBadgeInfo(masteredTotal);
+      
+      if (lastBadgedCount.current === -1) {
+          lastBadgedCount.current = badge?.threshold || 0;
+          return;
+      }
+      if (badge && badge.threshold > lastBadgedCount.current) {
+        setShowBadge(badge);
+        lastBadgedCount.current = badge.threshold;
+      }
+    });
+  
+    // 2. 監聽使用者個人設定 (新增的語言同步)
+    const userRef = doc(db, 'artifacts', appId, 'users', user.uid);
+    const unsubscribeUser = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists() && docSnap.data().langPreference) {
+        const cloudLang = docSnap.data().langPreference;
+        // 只有當雲端與目前不同時才更新，避免無限迴圈
+        setLangMode(prev => {
+          if (prev !== cloudLang) {
+            localStorage.setItem('voca_lang_pref', cloudLang);
+            return cloudLang;
+          }
+          return prev;
+        });
+      }
+    });
+  
+    return () => {
+      unsubscribeWords();
+      unsubscribeUser();
+    };
+  }, [user]);
+  const handleLangModeChange = async (newLang) => {
+  setLangMode(newLang);
+  localStorage.setItem('voca_lang_pref', newLang);
+  if (user) {
+        try {
+          const userRef = doc(db, 'artifacts', appId, 'users', user.uid);
+          await updateDoc(userRef, { langPreference: newLang });
+        } catch (e) {
+          console.error("雲端同步失敗", e);
         }
       }
-    );
-    return () => unsubscribe();
-  }, [user]);
+    };
 
   // ========================================================
   // 🔍 自動翻譯與拼寫檢查
@@ -624,14 +660,14 @@ const fetchExplanation = async (wordObj) => {
           {/* 語言切換 */}
           <div className="bg-stone-100 p-1 rounded-xl flex border border-stone-200/50 scale-90 sm:scale-100">
             {['EN', 'JP'].map(l => (
-              <button 
-                key={l} 
-                onClick={() => setLangMode(l)} 
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${langMode === l ? (l === 'EN' ? 'bg-[#2D4F1E]' : 'bg-[#C2410C]') + ' text-white shadow-md' : 'text-stone-400'}`}
-              >
-                {l}
-              </button>
-            ))}
+            <button 
+              key={l} 
+              onClick={() => handleLangModeChange(l)} // 這裡改成呼叫 handleLangModeChange
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${langMode === l ? (l === 'EN' ? 'bg-[#2D4F1E]' : 'bg-[#C2410C]') + ' text-white shadow-md' : 'text-stone-400'}`}
+            >
+              {l}
+            </button>
+          ))}
           </div>
 
           <div className="h-8 w-px bg-stone-100 mx-1"></div>
