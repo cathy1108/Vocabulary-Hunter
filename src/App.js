@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import logoImg from './logo.png';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -230,11 +229,10 @@ const App = () => {
       // 修改分頁標題
     document.title = "VocabHunter | 智慧單字獵場";
     
-    // 動態修改 Favicon (使用 Emoji 作為臨時 Logo)
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.rel = 'icon';
-    // 這裡使用 SVG Data URI，將 🧭 羅盤作為圖示
-    link.href = logoImg; 
+    // 修改這裡：直接指向 public 下的 logo.png
+    link.href = "/logo.png"; 
     document.getElementsByTagName('head')[0].appendChild(link);
     const initAuth = async () => {
       try {
@@ -554,11 +552,11 @@ const fetchExplanation = async (wordObj) => {
           {/* 標誌圖示：結合羅盤與獵人綠 */}
           <div className="relative">
             <div className="bg-[#2D4F1E] p-1 rounded-2xl shadow-lg rotate-[-5deg] group-hover:rotate-0 transition-transform duration-300 w-12 h-12 flex items-center justify-center overflow-hidden">
-              <img 
-                src={logoImg}  // 使用剛才 import 的變數
-                alt="VocabHunter Logo" 
-                className="w-full h-full object-contain scale-125" // object-contain 確保去背圖不變形
-              />
+             <img 
+              src="/logo.png"  // 修改這裡，直接用字串路徑
+              alt="VocabHunter Logo" 
+              className="w-full h-full object-contain scale-125" 
+            />
             </div>
           </div>
           
