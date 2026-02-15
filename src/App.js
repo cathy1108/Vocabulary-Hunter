@@ -720,7 +720,7 @@ const fetchExplanation = async (wordObj) => {
                 >
                   <div className="flex-1 pr-4">
                     <div className="flex items-center gap-3">
-                      <span className="font-black text-1g text-stone-800">{word.term}</span>
+                      <span className="font-black text-2xl text-stone-800">{word.term}</span>
                       {word.stats?.mc?.archived && (
                         <div className="bg-orange-50 text-orange-600 px-2 py-1 rounded-lg flex items-center gap-1 animate-pulse">
                           <Award size={14} className="fill-orange-500"/>
@@ -728,7 +728,7 @@ const fetchExplanation = async (wordObj) => {
                         </div>
                       )}
                     </div>
-                    <div className="text-stone-400 text-sm font-bold mt-1 line-clamp-1">{word.definition}</div>
+                    <div className="text-stone-400 font-bold mt-1 line-clamp-1">{word.definition}</div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={(e) => { e.stopPropagation(); speak(word.term, word.lang); }} className="w-12 h-12 flex items-center justify-center text-stone-200 hover:text-[#2D4F1E] transition-all">
