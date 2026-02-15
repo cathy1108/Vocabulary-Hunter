@@ -995,12 +995,14 @@ const fetchExplanation = async (wordObj) => {
         </div>
       )}
       <style>{`
+        /* 讓全站預設字體稍微縮小一點 */
+        :root { font-size: 14px; } 
         @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
         .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
-        body { overflow-x: hidden; touch-action: manipulation; }
+        body { overflow-x: hidden; touch-action: manipulation; -webkit-font-smoothing: antialiased; }
       `}</style>
     </div>
   );
