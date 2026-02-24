@@ -451,7 +451,7 @@ const fetchExplanation = async (wordObj) => {
   // 在 fetchExplanation 函式開頭加入
   
   const now = Date.now();
-  if (now - lastCallTime < 3000) { 
+  if (now - lastCallTime < 5000) { 
     showToast("獵人正在觀察環境，請稍候...", "info");
     return;
   }
