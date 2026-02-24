@@ -559,6 +559,7 @@ const fetchExplanation = async (wordObj) => {
         message: `🍃 失手了！答案是：${quizWord.definition}` 
       });
     }
+    speak(quizWord.term, quizWord.lang);
     
     // 只有在完全正確時才更新資料庫中的熟練度
     if (isCorrect) {
