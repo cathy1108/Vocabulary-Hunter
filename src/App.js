@@ -446,34 +446,36 @@ const addSynonym = async (synonymText) => {
   // ========================================================
   // 統一的分析函式：整合持久化快取與實時分析
 const fetchExplanation = async (wordObj) => {
+  // 1. 如果正在解釋中，直接報警，不執行任何動作
   if (isExplaining || !wordObj) return;
-  setSelectedWord(wordObj);
-  // 在 fetchExplanation 函式開頭加入
-  
-  const now = Date.now();
-  if (now - lastCallTime < 5000) { 
-    showToast("獵人正在觀察環境，請稍候...", "info");
-    return;
-  }
-  lastCallTime = now; // 更新最後呼叫時間
-  // 🚀 結束
-  
-  // 1. 優先檢查單字物件中是否已有從 Firestore 同步過來的 analysis (最快、免費用)
+
+  // 2. 絕對優先！檢查是否已經有分析結果 (從 Firestore 同步或 Session Cache)
+  // 只要 wordObj.analysis 存在，就絕對不發送 fetch 請求
   if (wordObj.analysis) {
+    setSelectedWord(wordObj);
     setExplanation(wordObj.analysis);
     return;
   }
 
-  // 2. 檢查當前 Session 的記憶體快取 (防止短時間重複點擊)
   const cacheKey = `${wordObj.lang}:${wordObj.term.toLowerCase()}`;
   if (analysisCache.has(cacheKey)) {
+    setSelectedWord(wordObj);
     setExplanation(analysisCache.get(cacheKey));
     return;
   }
 
-  // 3. 真的沒資料，才動用 Gemini
-  setExplanation(null);
+  // 3. 嚴格的時間冷卻 (Cooldown)
+  const now = Date.now();
+  if (now - lastCallTime < 5000) { // 5秒內禁止連續請求
+    showToast("獵人觀察中，請稍候再點下一個單字...", "info");
+    return;
+  }
+  
+  // 通過檢查，準備啟動 API
+  setSelectedWord(wordObj);
   setIsExplaining(true);
+  setExplanation(null); // 清空舊內容
+  lastCallTime = now;
   try {
     const prompt = `你是一位專業的語言導師。請分析單字 "${wordObj.term}" (${wordObj.lang === 'JP' ? '日文' : '英文'})。
         請直接回傳一個 JSON 物件，內容必須使用「繁體中文」：
@@ -517,7 +519,9 @@ const fetchExplanation = async (wordObj) => {
     }
   } catch (e) { 
     console.error("AI Analysis Error", e);
-    showToast("AI 獵人暫時失手，請稍後再試", "error");
+    // 針對 429 給予特定提示
+    const errorMsg = e.message.includes("429") ? "API 次數達上限，請等 30 秒再試" : "AI 獵人暫時失手";
+    showToast(errorMsg, "error");
   } finally { 
     setIsExplaining(false); 
   }
