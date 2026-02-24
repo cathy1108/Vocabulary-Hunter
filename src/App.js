@@ -80,7 +80,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
     };
 
 const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
-const GEMINI_MODEL = "gemma-3-27b";
+const GEMINI_MODEL = "gemini-2.0-flash";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -448,6 +448,15 @@ const addSynonym = async (synonymText) => {
 const fetchExplanation = async (wordObj) => {
   if (isExplaining || !wordObj) return;
   setSelectedWord(wordObj);
+  // 在 fetchExplanation 函式開頭加入
+  
+  const now = Date.now();
+  if (now - lastCallTime < 2000) { 
+    showToast("獵人正在觀察環境，請稍候...", "info");
+    return;
+  }
+  lastCallTime = now; // 更新最後呼叫時間
+  // 🚀 結束
   
   // 1. 優先檢查單字物件中是否已有從 Firestore 同步過來的 analysis (最快、免費用)
   if (wordObj.analysis) {
@@ -476,9 +485,7 @@ const fetchExplanation = async (wordObj) => {
           "example_zh": "例句翻譯(繁體中文)",
           "synonyms": ["單字1 (解釋1)", "單字2 (解釋2)"],
           "tips": "記憶技巧或字根拆解"
-        }
-        
-        注意：不要輸出任何 Markdown 標籤或是多餘的解釋文字。`;
+        }`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
     const res = await fetchWithRetry(url, {
