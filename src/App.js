@@ -80,7 +80,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
     };
 
 const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
-const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+const GEMINI_MODEL = "gemma-3-27b";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -466,15 +466,19 @@ const fetchExplanation = async (wordObj) => {
   setExplanation(null);
   setIsExplaining(true);
   try {
-    const prompt = `你是一個語言專家。分析單字 "${wordObj.term}" (${wordObj.lang === 'JP' ? '日文' : '英文'})。回傳格式必須為 JSON 物件，內容須為繁體中文：
-    {
-      "phonetic": "讀法(日文給平假名, 英文給音標)",
-      "pos": "詞性(繁體中文)",
-      "example_original": "單句例句(原文)",
-      "example_zh": "例句翻譯(繁體中文)",
-      "synonyms": ["該語言單字1 (解釋1)", "該語言單字2 (解釋2)"],
-      "tips": "記憶技巧"
-    }`;
+    const prompt = `你是一位專業的語言導師。請分析單字 "${wordObj.term}" (${wordObj.lang === 'JP' ? '日文' : '英文'})。
+        請直接回傳一個 JSON 物件，內容必須使用「繁體中文」：
+        
+        {
+          "phonetic": "讀法(日文給平假名, 英文給音標)",
+          "pos": "詞性",
+          "example_original": "單句例句(原文)",
+          "example_zh": "例句翻譯(繁體中文)",
+          "synonyms": ["單字1 (解釋1)", "單字2 (解釋2)"],
+          "tips": "記憶技巧或字根拆解"
+        }
+        
+        注意：不要輸出任何 Markdown 標籤或是多餘的解釋文字。`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
     const res = await fetchWithRetry(url, {
