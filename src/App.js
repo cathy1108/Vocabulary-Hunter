@@ -59,7 +59,7 @@ import {
 // ========================================================
 const isCanvas = typeof __app_id !== 'undefined';
 const analysisCache = new Map();
-
+let lastCallTime = 0;
 
 // ========================================================
 // 🛠️ Firebase 配置修復 (針對 404 init.json 錯誤)
