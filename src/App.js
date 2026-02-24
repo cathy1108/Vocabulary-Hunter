@@ -451,7 +451,7 @@ const fetchExplanation = async (wordObj) => {
   // 在 fetchExplanation 函式開頭加入
   
   const now = Date.now();
-  if (now - lastCallTime < 2000) { 
+  if (now - lastCallTime < 3000) { 
     showToast("獵人正在觀察環境，請稍候...", "info");
     return;
   }
@@ -496,6 +496,11 @@ const fetchExplanation = async (wordObj) => {
         generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
       })
     });
+    if (!res || !res.ok) {
+      const errorData = res ? await res.json() : {};
+      console.error("API 回傳錯誤:", errorData);
+      throw new Error(res?.status === 429 ? "請求太頻繁" : "API 連線失敗");
+    }
 
     const result = await res.json();
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
