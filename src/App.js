@@ -80,7 +80,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
     };
 
 const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
-const GEMINI_MODEL = "gemini-2.0-flash-lite-preview-02-05";
+const GEMINI_MODEL = "gemini-1.5-flash";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -486,13 +486,16 @@ const fetchExplanation = async (wordObj) => {
           "tips": "記憶技巧或字根拆解"
         }`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`;
-    const res = await fetchWithRetry(url, {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-goog-api-key': geminiApiKey  // ✅ 這樣 Key 就不會出現在網址列
+      },
       body: JSON.stringify({ 
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+        // ... 其他設定
       })
     });
     if (!res || !res.ok) {
