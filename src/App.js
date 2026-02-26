@@ -80,7 +80,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
     };
 
 const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.0-flash-lite-preview-02-05";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -203,6 +203,7 @@ const App = () => {
   const [selectedWord, setSelectedWord] = useState(null);
   const [explanation, setExplanation] = useState(null);
   const [isExplaining, setIsExplaining] = useState(false);
+  const apiLock = useRef(false);
   const [spellCheck, setSpellCheck] = useState(null);
   const typingTimer = useRef(null);
   const [toast, setToast] = useState(null); // { msg: string, type: 'success' | 'info' }
@@ -446,32 +447,28 @@ const addSynonym = async (synonymText) => {
   // ========================================================
   // 統一的分析函式：整合持久化快取與實時分析
 const fetchExplanation = async (wordObj) => {
-  // 1. 如果正在解釋中，直接報警，不執行任何動作
-  if (isExplaining || !wordObj) return;
-
-  // 2. 絕對優先！檢查是否已經有分析結果 (從 Firestore 同步或 Session Cache)
-  // 只要 wordObj.analysis 存在，就絕對不發送 fetch 請求
+  // 1. 檢查是否已經有分析結果，有的話直接顯示，不跑 API
   if (wordObj.analysis) {
     setSelectedWord(wordObj);
     setExplanation(wordObj.analysis);
     return;
   }
 
-  const cacheKey = `${wordObj.lang}:${wordObj.term.toLowerCase()}`;
-  if (analysisCache.has(cacheKey)) {
-    setSelectedWord(wordObj);
-    setExplanation(analysisCache.get(cacheKey));
+  // 2. 防穿透鎖：如果正在請求中，或是 apiLock 為 true，直接擋掉
+  if (isExplaining || apiLock.current) {
+    console.log("⚠️ 請求攔截：已有 API 正在執行中");
     return;
   }
 
-  // 3. 嚴格的時間冷卻 (Cooldown)
+  // 3. 嚴格冷卻時間檢查 (5秒)
   const now = Date.now();
-  if (now - lastCallTime < 5000) { // 5秒內禁止連續請求
-    showToast("獵人觀察中，請稍候再點下一個單字...", "info");
+  if (now - lastCallTime < 5000) {
+    showToast("太快了，獵人還在填彈...", "info");
     return;
   }
   
   // 通過檢查，準備啟動 API
+  apiLock.current = true; // 立即上鎖
   setSelectedWord(wordObj);
   setIsExplaining(true);
   setExplanation(null); // 清空舊內容
@@ -499,9 +496,12 @@ const fetchExplanation = async (wordObj) => {
       })
     });
     if (!res || !res.ok) {
-      const errorData = res ? await res.json() : {};
-      console.error("API 回傳錯誤:", errorData);
-      throw new Error(res?.status === 429 ? "請求太頻繁" : "API 連線失敗");
+      const errorData = await res.json();
+      // 如果看到 429，顯示更友善的提示
+      if (res.status === 429) {
+        showToast("Gemini 能量耗盡，請等一分鐘再試", "info");
+      }
+      throw new Error(`API Error: ${res.status}`);
     }
 
     const result = await res.json();
