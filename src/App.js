@@ -426,48 +426,44 @@ const App = () => {
 
   // 1. 修改同義詞快速加入函式
 const addSynonym = async (synonymText) => {
-  let term, definition;
-
-  // 使用正規表示法抓取所有括號內容
-  const matches = [...synonymText.matchAll(/\(([^)]+)\)/g)];
-
-  if (langMode === 'JP') {
-    // 日文處理：例如 "小道 (こみち) (解釋)"
-    if (matches.length >= 2) {
-      // 有兩組括號：第一組是平假名，連同漢字保留在 term；第二組是中文解釋
-      term = synonymText.split(matches[1][0])[0].trim(); 
-      definition = matches[1][1]; 
+    let term, definition;
+  
+    // 使用正則表達式匹配：文字 (讀音) (解釋)
+    // 結構：主體文字 + 空格(可選) + (內容) + 空格(可選) + (內容)
+    const match = synonymText.match(/^(.*?)\s*\((.*?)\)\s*\((.*?)\)$/);
+  
+    if (langMode === 'JP' && match) {
+      // 日文模式：將「漢字(讀音)」合併為 term，最後一個括號作為 definition
+      term = `${match[1].trim()} (${match[2].trim()})`; 
+      definition = match[3].trim();
     } else {
-      // 只有一組或沒括號
-      term = synonymText.trim();
-      definition = "由同義詞快速加入";
+      // 英文模式或不符合日文格式時
+      // 簡單處理：抓取第一個左括號前的文字為單字，第一個括號內容為解釋
+      const parts = synonymText.split('(');
+      term = parts[0].trim();
+      definition = parts[1] ? parts[1].replace(')', '').trim() : "由同義詞快速加入";
     }
-  } else {
-    // 英文處理：例如 "Capture (捕獲)"
-    term = synonymText.split('(')[0].trim();
-    definition = matches.length > 0 ? matches[0][1] : "由同義詞快速加入";
-  }
-
-  // 檢查重複 (維持原本邏輯)
-  if (words.some(w => w.lang === langMode && w.term.toLowerCase() === term.toLowerCase())) {
-    showToast(`「${term}」已經在獵場中了`, 'info');
-    return;
-  }
-
-  try {
-    const userVocabRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
-    await addDoc(userVocabRef, {
-      term,
-      definition,
-      lang: langMode,
-      createdAt: Date.now(),
-      stats: { mc: { correct: 0, total: 0, archived: false } }
-    });
-    showToast(`已成功捕獲同義詞：${term}`);
-  } catch (e) {
-    showToast("捕獲失敗，請稍後再試", "error");
-  }
-};
+  
+    // 檢查重複
+    if (words.some(w => w.lang === langMode && w.term.toLowerCase() === term.toLowerCase())) {
+      showToast(`「${term}」已經在獵場中了`, 'info');
+      return;
+    }
+  
+    try {
+      const userVocabRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocab');
+      await addDoc(userVocabRef, {
+        term,
+        definition,
+        lang: langMode,
+        createdAt: Date.now(),
+        stats: { mc: { correct: 0, total: 0, archived: false } }
+      });
+      showToast(`已成功捕獲：${term}`);
+    } catch (e) {
+      showToast("捕獲失敗", "error");
+    }
+  };
 // 2. 修改 AI 分析函式：新增快取機制
 
   // ========================================================
