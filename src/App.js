@@ -564,6 +564,7 @@ const fetchExplanation = async (wordObj, context = "") => {
     showToast(errorMsg, "error");
   } finally { 
     setIsExplaining(false); 
+    apiLock.current = false;
   }
 };
 
