@@ -19,6 +19,7 @@ import {
   doc, 
   updateDoc, 
   onSnapshot, 
+  setDoc,
   addDoc, 
   deleteDoc,
   query
@@ -342,14 +343,26 @@ const App = () => {
     };
   }, [user]);
   const handleLangModeChange = async (newLang) => {
-  setLangMode(newLang);
-  localStorage.setItem('voca_lang_pref', newLang);
-  if (user) {
+      setLangMode(newLang);
+      localStorage.setItem('voca_lang_pref', newLang);
+      
+      if (user) {
         try {
+          // 取得使用者文件的引用
           const userRef = doc(db, 'artifacts', appId, 'users', user.uid);
-          await updateDoc(userRef, { langPreference: newLang });
+          
+          // 使用 setDoc 並加上 { merge: true }
+          // 這會確保：如果文件不存在就建立，如果存在就只更新 langPreference 欄位
+          await setDoc(userRef, { 
+            langPreference: newLang,
+            lastActive: Date.now() // 順便紀錄最後活動時間也是好習慣
+          }, { merge: true }); 
+          
+          console.log("雲端同步成功");
         } catch (e) {
           console.error("雲端同步失敗", e);
+          // 如果還是報錯，檢查一下 appId 是否正確
+          console.log("當前 AppId:", appId);
         }
       }
     };
