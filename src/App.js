@@ -476,7 +476,7 @@ const addSynonym = async (synonymText) => {
   // 統一的分析函式：整合持久化快取與實時分析
 const fetchExplanation = async (wordObj, context = "") => {
   // 1. 檢查是否已經有分析結果，有的話直接顯示，不跑 API
-  const cacheId = `${wordObj.term}-${context}`;
+  const cacheId = '${wordObj.term}-${context}'
   
   if (analysisCache.has(cacheId)) {
     console.log("Using cached analysis for:", wordObj.term);
