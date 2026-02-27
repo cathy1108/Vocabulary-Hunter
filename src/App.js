@@ -80,7 +80,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
     };
 
 const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-2.0-flash-001";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -489,7 +489,7 @@ const fetchExplanation = async (wordObj, context = "") => {
           "pos": "詞性",
           "example_original": "單句例句(原文)",
           "example_zh": "例句翻譯(繁體中文)",
-          "synonyms": ["單字1 (解釋1)", "單字2 (解釋2)"],
+          "synonyms": ["單字1 （日文給日文單字，英文給英文單字） (解釋1 言簡意賅一點)", "單字2 （日文給日文單字，英文給英文單字） (解釋2 言簡意賅一點)"],
           "tips": "記憶技巧或字根拆解"
         }`;
 
