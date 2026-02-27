@@ -517,7 +517,7 @@ const fetchExplanation = async (wordObj) => {
       const wordDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vocab', wordObj.id);
       await updateDoc(wordDocRef, { analysis: parsed });
 
-      analysisCache.set(cacheKey, parsed);
+      analysisCache.set(cacheId, parsed);
       setExplanation(parsed);
     }
   } catch (e) { 
