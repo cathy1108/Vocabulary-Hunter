@@ -446,8 +446,15 @@ const addSynonym = async (synonymText) => {
   // 🤖 AI 分析
   // ========================================================
   // 統一的分析函式：整合持久化快取與實時分析
-const fetchExplanation = async (wordObj) => {
+const fetchExplanation = async (wordObj, context = "") => {
   // 1. 檢查是否已經有分析結果，有的話直接顯示，不跑 API
+  const cacheId = '${word}-${context}'
+  
+  if (analysisCache.has(cacheId)) {
+    console.log("Using cached analysis for:", word);
+    return analysisCache.get(cacheId);
+  }
+  
   if (wordObj.analysis) {
     setSelectedWord(wordObj);
     setExplanation(wordObj.analysis);
