@@ -426,12 +426,22 @@ const App = () => {
 
   // 1. 修改同義詞快速加入函式
 const addSynonym = async (synonymText) => {
-  const term = synonymText.split('(')[0].trim();
-  const definition = synonymText.includes('(') 
-    ? synonymText.match(/\(([^)]+)\)/)[1] 
-    : "由同義詞快速加入";
+  let term, definition;
 
-  // 檢查是否重複
+  // 融合邏輯：判斷目前語言模式
+  if (langMode === 'JP') {
+    // 日文處理：保留「漢字 (平假名)」作為單字，避免平假名變成中文解釋
+    term = synonymText.trim(); 
+    definition = "由同義詞快速加入";
+  } else {
+    // 英文處理：維持原有的括號拆解邏輯
+    term = synonymText.split('(')[0].trim();
+    definition = synonymText.includes('(') 
+      ? synonymText.match(/\(([^)]+)\)/)[1] 
+      : "由同義詞快速加入";
+  }
+
+  // 檢查是否重複 (維持原本邏輯)
   if (words.some(w => w.lang === langMode && w.term.toLowerCase() === term.toLowerCase())) {
     showToast(`「${term}」已經在獵場中了`, 'info');
     return;
@@ -446,13 +456,12 @@ const addSynonym = async (synonymText) => {
       createdAt: Date.now(),
       stats: { mc: { correct: 0, total: 0, archived: false } }
     });
-    // ✅ 這就是你要的具體感受
+    // ✅ 顯示成功捕捉提示
     showToast(`已成功捕獲同義詞：${term}`);
   } catch (e) {
     showToast("捕獲失敗，請稍後再試", "error");
   }
 };
-
 // 2. 修改 AI 分析函式：新增快取機制
 
   // ========================================================
