@@ -80,7 +80,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
     };
 
 const geminiApiKey = isCanvas ? "" : (process.env.REACT_APP_GEMINI_KEY || "");
-const GEMINI_MODEL = "gemini-2.0-flash-001";
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
