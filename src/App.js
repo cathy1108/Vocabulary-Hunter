@@ -428,20 +428,27 @@ const App = () => {
 const addSynonym = async (synonymText) => {
   let term, definition;
 
-  // 融合邏輯：判斷目前語言模式
+  // 使用正規表示法抓取所有括號內容
+  const matches = [...synonymText.matchAll(/\(([^)]+)\)/g)];
+
   if (langMode === 'JP') {
-    // 日文處理：保留「漢字 (平假名)」作為單字，避免平假名變成中文解釋
-    term = synonymText.trim(); 
-    definition = "由同義詞快速加入";
+    // 日文處理：例如 "小道 (こみち) (解釋)"
+    if (matches.length >= 2) {
+      // 有兩組括號：第一組是平假名，連同漢字保留在 term；第二組是中文解釋
+      term = synonymText.split(matches[1][0])[0].trim(); 
+      definition = matches[1][1]; 
+    } else {
+      // 只有一組或沒括號
+      term = synonymText.trim();
+      definition = "由同義詞快速加入";
+    }
   } else {
-    // 英文處理：維持原有的括號拆解邏輯
+    // 英文處理：例如 "Capture (捕獲)"
     term = synonymText.split('(')[0].trim();
-    definition = synonymText.includes('(') 
-      ? synonymText.match(/\(([^)]+)\)/)[1] 
-      : "由同義詞快速加入";
+    definition = matches.length > 0 ? matches[0][1] : "由同義詞快速加入";
   }
 
-  // 檢查是否重複 (維持原本邏輯)
+  // 檢查重複 (維持原本邏輯)
   if (words.some(w => w.lang === langMode && w.term.toLowerCase() === term.toLowerCase())) {
     showToast(`「${term}」已經在獵場中了`, 'info');
     return;
@@ -456,7 +463,6 @@ const addSynonym = async (synonymText) => {
       createdAt: Date.now(),
       stats: { mc: { correct: 0, total: 0, archived: false } }
     });
-    // ✅ 顯示成功捕捉提示
     showToast(`已成功捕獲同義詞：${term}`);
   } catch (e) {
     showToast("捕獲失敗，請稍後再試", "error");
